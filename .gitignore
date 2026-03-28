@@ -1,0 +1,11 @@
+node_modules/
+dist/
+renderer/bundle.js
+logs/
+*.log
+.DS_Store
+window-state.json
+bugs.json
+notes.json
+launch-test.sh
+icon.svg.png

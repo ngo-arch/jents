@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div id="sidebar-header"></div>
+      <nav id="agent-list"></nav>
+      <div id="sidebar-footer">
+        <button id="btn-add-agent" title="Add agent">
+          <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span class="sidebar-btn-label">Add Agent</span>
+        </button>
+        <button id="btn-duplicate-agent" title="New instance of selected agent">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span class="sidebar-btn-label">New Instance</span>
+        </button>
+        <button id="btn-report-bug">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span class="sidebar-btn-label">Report Bug</span>
+        </button>
+        <button id="btn-sidebar-toggle" title="Collapse sidebar">
+          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+          <span class="sidebar-btn-label">Collapse</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Bug report modal -->
+    <div id="bug-modal" class="hidden">
+      <div id="bug-modal-backdrop"></div>
+      <div id="bug-modal-content">
+        <h3>Report a Bug</h3>
+        <textarea id="bug-input" placeholder="Describe the bug..." rows="4" spellcheck="false"></textarea>
+        <div id="bug-modal-actions">
+          <button id="btn-bug-cancel">Cancel</button>
+          <button id="btn-bug-submit">Submit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <main id="main">
+      <!-- Toolbar -->
+      <header id="toolbar">
+        <div id="agent-info">
+          <span id="agent-name"></span>
+          <span id="agent-status">Stopped</span>
+          <div id="mode-selector">
+            <button id="mode-badge" title="Permission mode (applied on restart)">Default</button>
+            <div id="mode-menu" class="hidden"></div>
+          </div>
+        </div>
+        <div id="toolbar-actions">
+          <button class="toolbar-btn" id="btn-start" title="Start new session (Cmd+R)">
+            <svg viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-resume" title="Resume last session">
+            <svg viewBox="0 0 24 24"><path d="M21 2v6h-6"/><path d="M21 13a9 9 0 1 1-3-7.7L21 8"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-restart" title="Restart session">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          <button class="toolbar-btn danger" id="btn-stop" title="Stop session">
+            <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="btn-clear" title="Clear terminal">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M5 6l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-copy-last" title="Copy last response">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="btn-logs" title="Session history">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-files" title="Recent files (Cmd+F)">
+            <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-reader" title="Reader view (Cmd+D)">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-notepad" title="Notepad (Cmd+E)">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="btn-configure" title="Configure agent">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Terminal area (full height, primary input) -->
+      <div id="terminal-container"></div>
+
+      <!-- Toast notifications -->
+      <div id="toast-container"></div>
+
+      <!-- (notepad panel is in the aside section below) -->
+
+      <!-- Reader overlay -->
+      <div id="reader" class="hidden">
+        <div id="reader-toolbar">
+          <span id="reader-title">Reader View</span>
+          <div id="reader-actions">
+            <button class="toolbar-btn" id="btn-reader-copy" title="Copy to clipboard">
+              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
+            <button class="toolbar-btn" id="btn-reader-close" title="Close (Esc)">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="reader-content"></div>
+      </div>
+    </main>
+
+    <!-- Logs panel (slides in from right) -->
+    <aside id="logs-panel" class="hidden">
+      <div id="logs-header">
+        <button id="btn-logs-back" class="hidden" title="Back to list">
+          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2 id="logs-title">Session History</h2>
+        <button id="btn-close-logs" title="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="logs-list"></div>
+      <div id="log-viewer" class="hidden">
+        <pre id="log-content"></pre>
+      </div>
+    </aside>
+
+    <!-- Files panel (slides in from right) -->
+    <aside id="files-panel" class="hidden">
+      <div id="files-header">
+        <h2>Recent Files</h2>
+        <div style="display:flex;gap:2px">
+          <button class="toolbar-btn" id="btn-files-finder" title="Open in Finder">
+            <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-files-refresh" title="Refresh">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-close-files" title="Close">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="files-list"></div>
+    </aside>
+
+    <!-- Notepad panel -->
+    <aside id="notepad-panel" class="hidden">
+      <div id="notepad-header">
+        <h2>Notepad</h2>
+        <button class="toolbar-btn" id="btn-close-notepad" title="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="notepad-editor">
+        <textarea id="notepad-input" placeholder="Write a note..." rows="4" spellcheck="false"></textarea>
+        <div id="notepad-editor-actions">
+          <span class="notepad-hint">Cmd+Enter to save</span>
+          <button id="btn-notepad-save">Save</button>
+        </div>
+      </div>
+      <div id="notepad-list"></div>
+    </aside>
+
+    <!-- Welcome screen (shown when no agents) -->
+    <div id="welcome-screen" class="hidden">
+      <div class="welcome-content">
+        <div class="welcome-logo">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="20" cy="20" r="8" fill="#5b8def"/>
+            <circle cx="44" cy="20" r="8" fill="#ef6b6b"/>
+            <circle cx="20" cy="44" r="8" fill="#6befa0"/>
+            <circle cx="44" cy="44" r="8" fill="#a06bef"/>
+          </svg>
+        </div>
+        <h1>Welcome to Jents</h1>
+        <p class="welcome-subtitle">Your desktop agent terminal. Create your first agent to get started.</p>
+        <button id="btn-welcome-add" class="welcome-btn">Add Your First Agent</button>
+      </div>
+    </div>
+
+    <!-- Add agent modal -->
+    <div id="add-agent-modal" class="hidden">
+      <div id="add-agent-backdrop"></div>
+      <div id="add-agent-content">
+        <h3>Add Agent</h3>
+        <div class="form-group">
+          <label>Start from a template</label>
+          <div id="template-selector"></div>
+        </div>
+        <div class="form-group">
+          <label for="add-agent-name">Name</label>
+          <input id="add-agent-name" type="text" placeholder="My Agent" spellcheck="false" />
+        </div>
+        <div class="form-group">
+          <label for="add-agent-cwd">Working Directory</label>
+          <div class="folder-input">
+            <input id="add-agent-cwd" type="text" placeholder="~/agents/my-agent" spellcheck="false" />
+            <button id="btn-browse-folder" class="browse-btn" type="button">Browse</button>
+          </div>
+          <div class="form-hint">Will be created if it doesn't exist. Browse to select an existing folder.</div>
+        </div>
+        <div class="form-group">
+          <label for="add-agent-command">Command</label>
+          <input id="add-agent-command" type="text" value="claude" spellcheck="false" />
+        </div>
+        <div class="form-group">
+          <label>Color</label>
+          <div id="color-picker"></div>
+        </div>
+        <div id="add-agent-actions">
+          <button id="btn-add-cancel">Cancel</button>
+          <button id="btn-add-confirm">Add Agent</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Configure panel (unified: Agent + Integrations + Channels) -->
+    <aside id="configure-panel" class="hidden">
+      <div id="configure-header">
+        <h2>Configure</h2>
+        <button class="toolbar-btn" id="btn-close-configure" title="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="configure-body">
+        <div class="config-section">
+          <div class="config-section-title">Agent</div>
+          <div id="config-agent-form"></div>
+        </div>
+        <div class="config-section">
+          <div class="config-section-title">Integrations</div>
+          <div id="config-integrations"></div>
+        </div>
+        <div class="config-section">
+          <div class="config-section-title">Channels</div>
+          <div id="config-channels"></div>
+        </div>
+        <div id="configure-footer">
+          <button id="btn-config-guide" class="config-guide-link">Guide: How to build agents</button>
+          <p class="config-footer-note">Restart the agent after changing integrations or channels.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Help panel -->
+    <aside id="help-panel" class="hidden">
+      <div id="help-header">
+        <h2>Guide</h2>
+        <button class="toolbar-btn" id="btn-close-help" title="Close">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div id="help-content"></div>
+    </aside>
+  </div>
+
+  <script src="bundle.js"></script>
+</body>
+</html>

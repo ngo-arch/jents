@@ -1,0 +1,25 @@
+{
+  "name": "jents",
+  "productName": "Jents",
+  "version": "1.0.0-alpha",
+  "description": "Desktop app for managing AI agent terminal sessions",
+  "main": "main.js",
+  "scripts": {
+    "build": "esbuild renderer/app.js --bundle --outfile=renderer/bundle.js --platform=browser --format=iife",
+    "start": "npm run build && electron .",
+    "rebuild": "electron-rebuild",
+    "postinstall": "electron-rebuild"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "marked": "^17.0.5",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
+    "electron": "^33.0.0",
+    "esbuild": "^0.24.0"
+  }
+}
