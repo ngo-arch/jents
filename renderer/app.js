@@ -96,12 +96,79 @@ function showWelcomeScreen() {
   document.getElementById('welcome-screen').classList.remove('hidden');
   document.getElementById('toolbar').style.display = 'none';
   document.getElementById('terminal-container').style.display = 'none';
+  renderStarterPacks();
 }
 
 function showMainUI() {
   document.getElementById('welcome-screen').classList.add('hidden');
   document.getElementById('toolbar').style.display = '';
   document.getElementById('terminal-container').style.display = '';
+}
+
+function renderStarterPacks() {
+  const container = document.getElementById('starter-packs');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const pack of STARTER_PACKS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'starter-pack-card';
+    const dots = pack.agents.map(a => `<span class="pack-dot" style="background:${a.color}"></span>`).join('');
+    card.innerHTML = `
+      <div class="pack-dots">${dots}</div>
+      <div class="pack-info">
+        <div class="pack-name">${pack.name}</div>
+        <div class="pack-desc">${pack.desc}</div>
+        <div class="pack-agents">${pack.agents.map(a => a.name).join(' + ')}</div>
+      </div>
+    `;
+    card.addEventListener('click', () => createStarterPack(pack));
+    container.appendChild(card);
+  }
+}
+
+async function createStarterPack(pack) {
+  for (const agentDef of pack.agents) {
+    const tmpl = SKILL_TEMPLATES.find(t => t.id === agentDef.template) || SKILL_TEMPLATES[0];
+    const id = agentDef.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    // Skip if agent with this id already exists
+    if (config.agents.some(a => a.id === id)) continue;
+
+    const firstWord = agentDef.name.split(/\s+/)[0];
+    const shortName = firstWord.length <= 4 ? firstWord.toUpperCase() : firstWord.slice(0, 4).toUpperCase();
+    const cwd = `~/agents/${id}`;
+
+    const newAgent = {
+      id,
+      name: agentDef.name,
+      shortName,
+      cwd,
+      command: 'claude',
+      color: agentDef.color,
+      channels: [],
+    };
+
+    const updated = await api.addAgent(newAgent);
+    if (updated) config = updated;
+
+    // Write starter files from template
+    if (tmpl && (tmpl.claudeMd || tmpl.runFiles.length > 0)) {
+      const files = [];
+      if (tmpl.claudeMd) files.push({ name: 'CLAUDE.md', content: tmpl.claudeMd });
+      for (const rf of tmpl.runFiles) files.push(rf);
+      await api.writeStarterFiles(cwd, files);
+    }
+
+    agentStates.set(id, 'stopped');
+    hasUnread.set(id, false);
+    createTerminalForAgent(newAgent);
+  }
+
+  showMainUI();
+  renderSidebar();
+  if (config.agents.length > 0) selectAgent(config.agents[0].id);
+  showToast(`${pack.name} created - ${pack.agents.length} agents ready`, 'success');
 }
 
 // --- Sidebar ---
@@ -1732,6 +1799,176 @@ Write a product spec for the feature described below.
 ## Feature
 [Describe the feature]
 ` },
+    ],
+  },
+  {
+    id: 'reviewer',
+    name: 'Code Reviewer',
+    desc: 'Review PRs, catch bugs, enforce standards',
+    claudeMd: `# Code Reviewer
+
+## Role
+You are a staff-level code reviewer. You review pull requests, catch bugs before they ship, and enforce code quality standards. You provide actionable feedback - not style nitpicks.
+
+## Guidelines
+- Focus on correctness, security, and maintainability - not style preferences
+- Every comment should be actionable: say what to change, not just what's wrong
+- Distinguish blocking issues from suggestions (prefix with MUST or CONSIDER)
+- Check for: logic errors, edge cases, missing error handling, security holes, test gaps
+- Read the PR description first to understand intent before reviewing code
+- Don't suggest refactors that aren't related to the PR's purpose
+- If the code works and is clear, approve it - perfect is the enemy of shipped
+
+## Workflow
+1. Read the PR description and linked issues
+2. Review the diff file by file
+3. Flag blocking issues (MUST) vs suggestions (CONSIDER)
+4. Check test coverage for changed code paths
+5. Summarize: approve, request changes, or comment
+`,
+    runFiles: [
+      { name: 'run-review.md', content: `# Review Code
+
+Review the changes described below. Follow these steps:
+
+1. **Understand** - Read the PR description and context
+2. **Review** - Go through each changed file
+3. **Flag** - Mark issues as MUST (blocking) or CONSIDER (suggestion)
+4. **Test gaps** - Note any untested code paths
+5. **Verdict** - Approve, request changes, or comment
+
+## PR / Changes
+[Paste PR link or describe the changes]
+` },
+    ],
+  },
+  {
+    id: 'qa',
+    name: 'QA Tester',
+    desc: 'Test features, find bugs, write regression tests',
+    claudeMd: `# QA Tester
+
+## Role
+You are a thorough QA tester. You test features systematically, find bugs before users do, and write regression tests to prevent regressions. You think like a user who will try everything wrong.
+
+## Guidelines
+- Test the happy path first, then edge cases, then adversarial inputs
+- Every bug report needs: steps to reproduce, expected vs actual, severity
+- Write regression tests for every bug you find
+- Check both the feature and its neighbors - changes often break adjacent things
+- Test with realistic data, not just "test123"
+- Don't just verify it works - verify it fails gracefully when it shouldn't work
+- If you can't reproduce a bug, document exactly what you tried
+
+## Workflow
+1. Understand what the feature should do (read spec/PR)
+2. Write test cases: happy path, edge cases, error cases
+3. Execute tests systematically
+4. File bugs with reproduction steps
+5. Write automated regression tests for confirmed bugs
+`,
+    runFiles: [
+      { name: 'run-test.md', content: `# Test Feature
+
+Test the feature described below. Follow these steps:
+
+1. **Understand** - Read the spec or PR to know expected behavior
+2. **Plan** - Write test cases (happy path, edges, errors)
+3. **Execute** - Run each test case, document results
+4. **Report** - File bugs with repro steps, expected vs actual
+5. **Automate** - Write regression tests for any bugs found
+
+## Feature
+[Describe what to test]
+` },
+    ],
+  },
+  {
+    id: 'devops',
+    name: 'DevOps',
+    desc: 'Deploy, monitor, manage infrastructure',
+    claudeMd: `# DevOps
+
+## Role
+You are a DevOps engineer. You manage deployments, monitor production health, and maintain infrastructure. You bias toward reliability and reversibility - every deploy should be easy to roll back.
+
+## Guidelines
+- Always check current production state before making changes
+- Prefer small, incremental deploys over big-bang releases
+- Every change should be reversible - know the rollback plan before deploying
+- Monitor after deploying: check logs, error rates, latency
+- Document infrastructure changes - the next person debugging at 2am will thank you
+- Never run destructive commands without confirming first
+- Keep secrets out of code and logs
+
+## Workflow
+1. Pre-deploy: check current state, verify tests pass
+2. Deploy: push changes incrementally
+3. Verify: check health endpoints, logs, error rates
+4. Monitor: watch for 10-15 minutes post-deploy
+5. Document: note what changed and any issues
+`,
+    runFiles: [
+      { name: 'run-deploy.md', content: `# Deploy
+
+Deploy the changes described below. Follow these steps:
+
+1. **Pre-check** - Verify tests pass, review what's being deployed
+2. **Deploy** - Push changes to the target environment
+3. **Verify** - Check health endpoints, logs, error rates
+4. **Monitor** - Watch metrics for 10-15 minutes
+5. **Document** - Note what was deployed and any issues
+
+## What to deploy
+[Describe the changes or target]
+` },
+    ],
+  },
+];
+
+// --- Starter Packs ---
+// Pre-built teams that create multiple agents at once
+// Inspired by gstack (github.com/garrytan/gstack) by Garry Tan
+const STARTER_PACKS = [
+  {
+    id: 'engineering',
+    name: 'Engineering Team',
+    desc: 'Ship software with a full dev squad',
+    agents: [
+      { template: 'engineer', name: 'Engineer', color: '#14b8a6' },
+      { template: 'reviewer', name: 'Code Reviewer', color: '#f59e0b' },
+      { template: 'qa', name: 'QA Tester', color: '#ec4899' },
+    ],
+  },
+  {
+    id: 'product',
+    name: 'Product Team',
+    desc: 'Plan, build, and analyze your product',
+    agents: [
+      { template: 'pm', name: 'Product Manager', color: '#a06bef' },
+      { template: 'engineer', name: 'Engineer', color: '#14b8a6' },
+      { template: 'analyst', name: 'Data Analyst', color: '#5b8def' },
+    ],
+  },
+  {
+    id: 'content',
+    name: 'Content Studio',
+    desc: 'Write, edit, and publish content',
+    agents: [
+      { template: 'writer', name: 'Writer', color: '#6befa0' },
+      { template: 'reviewer', name: 'Editor', color: '#f59e0b' },
+      { template: 'analyst', name: 'Research Analyst', color: '#5b8def' },
+    ],
+  },
+  {
+    id: 'fullstack',
+    name: 'Full Stack',
+    desc: 'End-to-end: plan, build, test, deploy',
+    agents: [
+      { template: 'pm', name: 'Product Manager', color: '#a06bef' },
+      { template: 'engineer', name: 'Engineer', color: '#14b8a6' },
+      { template: 'reviewer', name: 'Code Reviewer', color: '#f59e0b' },
+      { template: 'devops', name: 'DevOps', color: '#ef6b6b' },
     ],
   },
 ];

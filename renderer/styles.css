@@ -1988,7 +1988,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  max-width: 400px;
+  max-width: 520px;
   text-align: center;
 }
 
@@ -2027,6 +2027,126 @@ html, body {
   background: rgba(255, 107, 61, 0.25);
   border-color: var(--accent);
   box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.welcome-btn-secondary {
+  padding: 8px 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.welcome-btn-secondary:hover {
+  border-color: var(--text-muted);
+  color: var(--text-bright);
+}
+
+.welcome-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 4px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.welcome-divider::before,
+.welcome-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.welcome-credit {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.welcome-credit a {
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+
+.welcome-credit a:hover {
+  color: var(--text-bright);
+}
+
+/* --- Starter Packs --- */
+#starter-packs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.starter-pack-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: left;
+}
+
+.starter-pack-card:hover {
+  border-color: var(--accent-border);
+  background: var(--bg-hover);
+}
+
+.pack-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.pack-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.pack-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pack-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+  margin-bottom: 2px;
+}
+
+.pack-desc {
+  font-size: 12px;
+  color: var(--text-bright);
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.pack-agents {
+  font-size: 11px;
+  color: var(--text-bright);
+  opacity: 0.5;
+  font-family: var(--font-mono);
 }
 
 /* === Add Agent Modal === */

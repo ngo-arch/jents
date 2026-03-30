@@ -1714,14 +1714,14 @@
   <nav>
     <div class="nav-left">
       <div class="nav-logo"><svg class="logo-dots" viewBox="0 0 20 20"><circle cx="6" cy="6" r="3" fill="#5b8def"/><circle cx="14" cy="6" r="3" fill="#6befa0"/><circle cx="6" cy="14" r="3" fill="#a06bef"/><circle cx="14" cy="14" r="3" fill="#ef6b6b"/><circle cx="10" cy="10" r="4" fill="#ff6b3d"/></svg><span class="logo-text">jents</span></div>
-      <span class="nav-badge">Private Beta</span>
+      <span class="nav-badge">Alpha</span>
     </div>
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
       <li><a href="#how-it-works">How It Works</a></li>
       <li><a href="#who">Who It's For</a></li>
     </ul>
-    <a href="#cta" class="nav-cta">Get Early Access</a>
+    <a href="https://github.com/nckobrien-arch/jents/releases/download/v1.0.0-alpha/Jents-macOS-arm64.zip" class="nav-cta">Download Alpha</a>
     <button class="nav-hamburger" aria-label="Open menu" onclick="document.getElementById('mobile-menu').classList.add('open')">
       <span></span><span></span><span></span>
     </button>
@@ -1737,9 +1737,9 @@
       <h1>Claude Code deserves<br><span>a real app.</span></h1>
       <p class="hero-sub">Jents wraps Claude Code in a native macOS app with multi-agent tabs, smart notifications, and a prompt composer - so you can run five agents in parallel without losing track.</p>
       <div class="hero-actions">
-        <a href="#cta" class="btn-primary">
+        <a href="https://github.com/nckobrien-arch/jents/releases/download/v1.0.0-alpha/Jents-macOS-arm64.zip" class="btn-primary">
           <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          Get Early Access
+          Download Alpha
         </a>
         <a href="#problem" class="btn-secondary">
           See how it works
@@ -2098,55 +2098,46 @@
       <!-- 2. Agent Forge -->
       <div class="spotlight-row fade-up">
         <div class="spotlight-text">
-          <div class="spotlight-tag">Agent Forge <span style="font-size:9px;padding:2px 6px;background:rgba(251,191,36,0.15);color:var(--yellow);border:1px solid rgba(251,191,36,0.2);border-radius:4px;margin-left:6px;vertical-align:middle">Coming Soon</span></div>
-          <h3>Spin up a new agent in 30 seconds</h3>
-          <p>Pick a template, name your agent, point it at a working directory, and launch. Agent Forge scaffolds the CLAUDE.md, sets up MCP servers, and drops it into your sidebar ready to run.</p>
+          <div class="spotlight-tag">Agent Forge</div>
+          <h3>From zero to running agent in 30 seconds</h3>
+          <p>Pick a role template, name your agent, and go. Jents creates the working directory, scaffolds a CLAUDE.md with real guidelines and run files, and drops it into your sidebar ready to start. Your agent comes pre-loaded with a role, workflow patterns, and best practices - not a blank file.</p>
           <ul class="spotlight-list">
-            <li><span class="check">&#10003;</span> Templates for common roles (Ops, Finance, Engineering, PM)</li>
-            <li><span class="check">&#10003;</span> Auto-generates CLAUDE.md with role instructions</li>
-            <li><span class="check">&#10003;</span> Pre-configures MCP servers based on template</li>
-            <li><span class="check">&#10003;</span> Color picker and shortname for the sidebar</li>
+            <li><span class="check">&#10003;</span> 5 role templates: Data Analyst, Writer, Engineer, PM, or Blank</li>
+            <li><span class="check">&#10003;</span> Each template writes a real CLAUDE.md with role, guidelines, and workflow</li>
+            <li><span class="check">&#10003;</span> Auto-generates run files for repeatable tasks (run-analysis.md, run-draft.md, etc.)</li>
+            <li><span class="check">&#10003;</span> Auto-creates the working directory - just type a name and hit Add</li>
           </ul>
         </div>
         <div class="spotlight-visual">
           <div class="visual-mock" style="padding:24px;gap:16px;justify-content:center">
-            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase">Agent Forge</div>
+            <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase">Add Agent</div>
             <!-- Template selector -->
-            <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <div style="padding:6px 12px;border-radius:8px;border:1px solid var(--accent);background:rgba(255,107,61,0.06);font-size:11px;font-weight:600;color:var(--accent)">Operations</div>
-              <div style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">Finance</div>
-              <div style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">Engineering</div>
-              <div style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">Product</div>
-              <div style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)">Custom</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:-8px">START FROM A TEMPLATE</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%">
+              <div style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)"><div style="font-weight:600;color:var(--text);margin-bottom:1px">Blank</div><div style="font-size:10px;color:var(--text-dim)">Start from scratch</div></div>
+              <div style="padding:8px 10px;border-radius:8px;border:1px solid var(--accent);background:rgba(255,107,61,0.06);font-size:11px"><div style="font-weight:600;color:var(--accent);margin-bottom:1px">Data Analyst</div><div style="font-size:10px;color:var(--text-dim)">Query, report, analyze</div></div>
+              <div style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)"><div style="font-weight:600;color:var(--text);margin-bottom:1px">Writer</div><div style="font-size:10px;color:var(--text-dim)">Draft, edit, publish</div></div>
+              <div style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary)"><div style="font-weight:600;color:var(--text);margin-bottom:1px">Engineer</div><div style="font-size:10px;color:var(--text-dim)">Code, debug, review</div></div>
             </div>
             <!-- Form fields -->
             <div style="display:flex;flex-direction:column;gap:10px;width:100%">
-              <div style="display:flex;gap:10px;align-items:center">
-                <div style="flex:1">
-                  <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">NAME</div>
-                  <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-hover);background:rgba(14,9,24,0.6);font-size:13px;color:var(--text)">Operations</div>
-                </div>
-                <div style="width:70px">
-                  <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">SHORT</div>
-                  <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-hover);background:rgba(14,9,24,0.6);font-size:13px;color:var(--text)">OPS</div>
-                </div>
-                <div style="width:40px">
-                  <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">COLOR</div>
-                  <div style="width:36px;height:36px;border-radius:8px;background:#5b8def;border:2px solid rgba(255,255,255,0.15)"></div>
-                </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">NAME</div>
+                <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-hover);background:rgba(14,9,24,0.6);font-size:13px;color:var(--text)">Data Analyst</div>
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">WORKING DIRECTORY</div>
-                <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-hover);background:rgba(14,9,24,0.6);font-family:var(--font-mono);font-size:12px;color:var(--text-secondary)">~/agents/ops</div>
+                <div style="padding:8px 12px;border-radius:8px;border:1px solid var(--border-hover);background:rgba(14,9,24,0.6);font-family:var(--font-mono);font-size:12px;color:var(--text-secondary)">~/agents/data-analyst</div>
+                <div style="font-size:10px;color:var(--text-dim);margin-top:3px">Will be created if it doesn't exist.</div>
               </div>
               <div style="display:flex;gap:8px;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid rgba(52,211,153,0.15);background:rgba(52,211,153,0.03)">
                 <span style="color:var(--green);font-size:14px">&#10003;</span>
-                <span style="font-size:11px;color:var(--text-secondary)">Will scaffold CLAUDE.md + .mcp.json from Ops template</span>
+                <span style="font-size:11px;color:var(--text-secondary)">Will create CLAUDE.md + run-analysis.md from template</span>
               </div>
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;width:100%">
               <span style="font-size:11px;padding:6px 14px;background:rgba(255,255,255,0.04);color:var(--text-dim);border-radius:8px;border:1px solid var(--border)">Cancel</span>
-              <span style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:8px;font-weight:600">Create Agent</span>
+              <span style="font-size:11px;padding:6px 14px;background:var(--accent);color:white;border-radius:8px;font-weight:600">Add Agent</span>
             </div>
           </div>
         </div>
@@ -2321,48 +2312,45 @@
         </div>
       </div>
 
-      <!-- 7. MCP Server Manager -->
+      <!-- 7. Integration Library -->
       <div class="spotlight-row fade-up">
         <div class="spotlight-text">
-          <div class="spotlight-tag">MCP Server Manager</div>
-          <h3>See and edit every tool your agents can use</h3>
-          <p>View, edit, add, and remove MCP servers per agent through a visual panel. See what tools each agent has access to without hand-editing .mcp.json files.</p>
+          <div class="spotlight-tag">Integration Library</div>
+          <h3>Connect agents to your tools in two clicks</h3>
+          <p>Browse a built-in library of MCP integrations - Slack, GitHub, PostgreSQL, Google Workspace, and more. Pick one, paste your credentials into labeled form fields, and save. No JSON editing required (but available for power users).</p>
           <ul class="spotlight-list">
-            <li><span class="check">&#10003;</span> Visual list of all configured servers</li>
-            <li><span class="check">&#10003;</span> Inline JSON editor for each server config</li>
-            <li><span class="check">&#10003;</span> Add or remove servers with one click</li>
+            <li><span class="check">&#10003;</span> Pre-built configs for Slack, GitHub, PostgreSQL, Filesystem, Google Workspace</li>
+            <li><span class="check">&#10003;</span> Form fields with labels - just paste your token, no JSON wrangling</li>
+            <li><span class="check">&#10003;</span> Links to setup docs for each integration</li>
+            <li><span class="check">&#10003;</span> "Edit as JSON" escape hatch for custom or advanced configs</li>
           </ul>
         </div>
         <div class="spotlight-visual">
-          <div class="visual-mcp">
-            <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">MCP SERVERS - OPS</div>
-            <div class="mcp-server expanded">
-              <div class="mcp-server-info">
-                <div class="mcp-name">metabase</div>
-                <div class="mcp-type">stdio - npx @anthropic/metabase-mcp</div>
+          <div class="visual-mock" style="padding:20px;gap:0;justify-content:flex-start">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1px;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px">Integrations</div>
+            <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Connect your agent to external tools.</div>
+            <!-- Library cards -->
+            <div style="display:flex;flex-direction:column;gap:6px;width:100%">
+              <div style="padding:10px 12px;border-radius:8px;border:1px solid var(--accent);background:rgba(255,107,61,0.04)">
+                <div style="font-size:12px;font-weight:600;color:var(--accent)">Slack</div>
+                <div style="font-size:11px;color:var(--text-dim)">Read channels, send messages, search threads</div>
               </div>
-              <div class="mcp-actions"><span style="color:var(--accent);border:1px solid rgba(255,107,61,0.2)">Editing</span></div>
-            </div>
-            <div class="mcp-editor">
-              {<br>
-              &nbsp;&nbsp;<span style="color:var(--purple)">"command"</span>: <span style="color:var(--green)">"npx"</span>,<br>
-              &nbsp;&nbsp;<span style="color:var(--purple)">"args"</span>: [<span style="color:var(--green)">"@anthropic/metabase-mcp"</span>],<br>
-              &nbsp;&nbsp;<span style="color:var(--purple)">"env"</span>: { <span style="color:var(--purple)">"METABASE_URL"</span>: <span style="color:var(--green)">"..."</span> }<br>
-              }
-            </div>
-            <div class="mcp-server">
-              <div class="mcp-server-info">
-                <div class="mcp-name">google-workspace</div>
-                <div class="mcp-type">stdio - npx @anthropic/gws-mcp</div>
+              <div style="padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
+                <div style="font-size:12px;font-weight:600;color:var(--text)">GitHub</div>
+                <div style="font-size:11px;color:var(--text-dim)">Manage repos, PRs, issues</div>
               </div>
-              <div class="mcp-actions"><span style="color:#34d399;border:1px solid rgba(52,211,153,0.2)">Edit</span><span style="color:var(--text-dim)">Del</span></div>
-            </div>
-            <div class="mcp-server">
-              <div class="mcp-server-info">
-                <div class="mcp-name">linear</div>
-                <div class="mcp-type">http - https://mcp.linear.app</div>
+              <div style="padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
+                <div style="font-size:12px;font-weight:600;color:var(--text)">PostgreSQL</div>
+                <div style="font-size:11px;color:var(--text-dim)">Query and explore databases</div>
               </div>
-              <div class="mcp-actions"><span style="color:#34d399;border:1px solid rgba(52,211,153,0.2)">Edit</span><span style="color:var(--text-dim)">Del</span></div>
+              <div style="padding:10px 12px;border-radius:8px;border:1px solid var(--border)">
+                <div style="font-size:12px;font-weight:600;color:var(--text)">Google Workspace</div>
+                <div style="font-size:11px;color:var(--text-dim)">Drive, Docs, Gmail, Sheets</div>
+              </div>
+              <div style="padding:10px 12px;border-radius:8px;border:1px dashed var(--border)">
+                <div style="font-size:12px;font-weight:600;color:var(--text-dim)">Custom Server</div>
+                <div style="font-size:11px;color:var(--text-dim)">Configure manually with JSON</div>
+              </div>
             </div>
           </div>
         </div>
@@ -2490,13 +2478,24 @@
   <section class="cta" id="cta">
     <div class="container">
       <h2>Run your agents like a team</h2>
-      <p>Join the waitlist for early access. macOS only.</p>
+      <p>Download the alpha for macOS (Apple Silicon). Free and open to testers.</p>
 
-      <form class="waitlist-form" id="waitlist-form" name="waitlist" data-netlify="true" method="POST" onsubmit="return handleWaitlist(event)">
-        <input type="email" name="email" placeholder="you@company.com" required />
-        <button type="submit">Get early access</button>
-      </form>
-      <p class="cta-note" id="waitlist-note">No spam. Just a heads up when it's ready.</p>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:24px">
+        <a href="https://github.com/nckobrien-arch/jents/releases/download/v1.0.0-alpha/Jents-macOS-arm64.zip" class="cta-download">
+          <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Download for macOS
+        </a>
+        <p class="cta-note">v1.0.0-alpha - Apple Silicon only. Requires <a href="https://docs.anthropic.com/en/docs/claude-code" style="color:var(--accent);text-decoration:underline">Claude Code</a>.</p>
+      </div>
+
+      <div style="margin-top:32px">
+        <p style="font-size:14px;color:var(--muted);margin-bottom:12px">Want updates on new releases?</p>
+        <form class="waitlist-form" id="waitlist-form" name="waitlist" data-netlify="true" method="POST" onsubmit="return handleWaitlist(event)">
+          <input type="email" name="email" placeholder="you@company.com" required />
+          <button type="submit">Notify me</button>
+        </form>
+        <p class="cta-note" id="waitlist-note">No spam. Just release notifications.</p>
+      </div>
     </div>
   </section>
 
