@@ -4,22 +4,25 @@
       <stop offset="0%" stop-color="#150e24"/>
       <stop offset="100%" stop-color="#0e0918"/>
     </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="48%" r="40%">
+      <stop offset="0%" stop-color="rgba(255,107,61,0.12)"/>
+      <stop offset="60%" stop-color="rgba(167,139,250,0.04)"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
   </defs>
   <!-- Scale down to ~80% with padding for proper macOS dock sizing -->
   <g transform="translate(100 100) scale(0.80469)">
     <!-- macOS squircle background -->
     <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+    <rect width="1024" height="1024" rx="228" fill="url(#glow)"/>
     <rect width="1024" height="1024" rx="228" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="2.5"/>
-    <!-- Wordmark: Roboto Slab 900 italic, tight kerning, centered -->
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@900&amp;display=swap');
-    </style>
-    <text x="512" y="590" text-anchor="middle" font-family="'Roboto Slab', serif" font-weight="900" font-size="310" font-style="italic" letter-spacing="-12" fill="white">jents</text>
-    <!-- Accent dot cluster above the j -->
-    <circle cx="310" cy="310" r="24" fill="#ff6b3d"/>
-    <circle cx="286" cy="286" r="12" fill="#5b8def"/>
-    <circle cx="334" cy="286" r="12" fill="#6befa0"/>
-    <circle cx="286" cy="334" r="12" fill="#a06bef"/>
-    <circle cx="334" cy="334" r="12" fill="#ef6b6b"/>
+    <!-- Five dots logo - cross/plus pattern, centered -->
+    <!-- Grid: 2x2 outer dots + 1 center dot (larger) -->
+    <circle cx="380" cy="380" r="100" fill="#5b8def"/>   <!-- top-left: blue -->
+    <circle cx="644" cy="380" r="100" fill="#6befa0"/>   <!-- top-right: green -->
+    <circle cx="380" cy="644" r="100" fill="#a06bef"/>   <!-- bottom-left: purple -->
+    <circle cx="644" cy="644" r="100" fill="#ef6b6b"/>   <!-- bottom-right: red -->
+    <circle cx="512" cy="512" r="120" fill="#ff6b3d"/>   <!-- center: orange (larger) -->
+    <!-- Subtle shadow under center dot -->
   </g>
 </svg>
