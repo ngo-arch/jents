@@ -38,10 +38,33 @@
       <div id="bug-modal-backdrop"></div>
       <div id="bug-modal-content">
         <h3>Report a Bug</h3>
-        <textarea id="bug-input" placeholder="Describe the bug..." rows="4" spellcheck="false"></textarea>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px">Opens a pre-filled GitHub issue. Your active agent and app version are included automatically.</p>
+        <textarea id="bug-input" placeholder="Describe what happened..." rows="4" spellcheck="false"></textarea>
         <div id="bug-modal-actions">
           <button id="btn-bug-cancel">Cancel</button>
-          <button id="btn-bug-submit">Submit</button>
+          <button id="btn-bug-submit">Open on GitHub</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Command palette -->
+    <div id="command-palette" class="hidden">
+      <div id="command-palette-backdrop"></div>
+      <div id="command-palette-content">
+        <input id="command-palette-input" type="text" placeholder="Search actions..." spellcheck="false" autocomplete="off" />
+        <div id="command-palette-list"></div>
+      </div>
+    </div>
+
+    <!-- Confirm modal (generic branded dialog) -->
+    <div id="confirm-modal" class="hidden">
+      <div id="confirm-modal-backdrop"></div>
+      <div id="confirm-modal-content">
+        <h3 id="confirm-modal-title">Are you sure?</h3>
+        <p id="confirm-modal-message"></p>
+        <div id="confirm-modal-actions">
+          <button id="btn-confirm-cancel">Cancel</button>
+          <button id="btn-confirm-ok" class="danger">Remove</button>
         </div>
       </div>
     </div>
@@ -82,6 +105,9 @@
           <button class="toolbar-btn" id="btn-logs" title="Session history">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </button>
+          <button class="toolbar-btn" id="btn-crons" title="Scheduled tasks">
+            <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </button>
           <button class="toolbar-btn" id="btn-files" title="Recent files (Cmd+F)">
             <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
           </button>
@@ -101,6 +127,22 @@
       <!-- Terminal area (full height, primary input) -->
       <div id="terminal-container"></div>
 
+      <!-- Terminal search bar -->
+      <div id="terminal-search" class="hidden">
+        <input id="terminal-search-input" type="text" placeholder="Search terminal..." spellcheck="false" />
+        <div id="terminal-search-nav">
+          <button id="btn-search-prev" title="Previous">
+            <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <button id="btn-search-next" title="Next">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button id="btn-search-close" title="Close (Esc)">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Toast notifications -->
       <div id="toast-container"></div>
 
@@ -111,6 +153,15 @@
         <div id="reader-toolbar">
           <span id="reader-title">Reader View</span>
           <div id="reader-actions">
+            <button class="toolbar-btn" id="btn-reader-edit" title="Edit" style="display:none">
+              <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            </button>
+            <button class="toolbar-btn" id="btn-reader-save" title="Save (Cmd+S)" style="display:none">
+              <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            </button>
+            <button class="toolbar-btn" id="btn-reader-cancel-edit" title="Cancel edit" style="display:none">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
             <button class="toolbar-btn" id="btn-reader-copy" title="Copy to clipboard">
               <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             </button>
@@ -134,9 +185,22 @@
           <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
+      <div id="logs-search">
+        <input id="logs-search-input" type="text" placeholder="Search sessions..." spellcheck="false" />
+      </div>
       <div id="logs-list"></div>
       <div id="log-viewer" class="hidden">
-        <pre id="log-content"></pre>
+        <div id="log-actions">
+          <button class="toolbar-btn" id="btn-log-send" title="Send to agent as context">
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <span>Send to Agent</span>
+          </button>
+          <button class="toolbar-btn" id="btn-log-copy" title="Copy to clipboard">
+            <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <div id="log-content" class="prose"></div>
       </div>
     </aside>
 
@@ -177,6 +241,36 @@
       <div id="notepad-list"></div>
     </aside>
 
+    <!-- Crons panel -->
+    <aside id="crons-panel" class="hidden">
+      <div id="crons-header">
+        <h2>Scheduled Tasks</h2>
+        <div style="display:flex;gap:2px">
+          <button class="toolbar-btn" id="btn-crons-refresh" title="Refresh">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          <button class="toolbar-btn" id="btn-close-crons" title="Close">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="crons-tabs">
+        <button class="crons-tab active" data-tab="jobs">Jobs</button>
+        <button class="crons-tab" data-tab="history">History</button>
+      </div>
+      <div id="crons-jobs"></div>
+      <div id="crons-history" class="hidden"></div>
+      <div id="crons-log-viewer" class="hidden">
+        <div id="crons-log-header">
+          <button id="btn-crons-log-back" title="Back">
+            <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span id="crons-log-title">Log</span>
+        </div>
+        <pre id="crons-log-content"></pre>
+      </div>
+    </aside>
+
     <!-- Welcome screen (shown when no agents) -->
     <div id="welcome-screen" class="hidden">
       <div class="welcome-content">
@@ -202,6 +296,15 @@
       <div id="add-agent-backdrop"></div>
       <div id="add-agent-content">
         <h3>Add Agent</h3>
+        <div class="form-group" id="github-import-group">
+          <label>Import from GitHub</label>
+          <div class="folder-input">
+            <input id="github-url-input" type="text" placeholder="https://github.com/owner/repo" spellcheck="false" />
+            <button id="btn-github-import" class="browse-btn" type="button">Import</button>
+          </div>
+          <div class="form-hint">Paste a repo URL. Clones into ~/agents/ and auto-detects CLAUDE.md.</div>
+        </div>
+        <div class="form-divider"><span>or start from scratch</span></div>
         <div class="form-group">
           <label>Start from a template</label>
           <div id="template-selector"></div>

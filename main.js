@@ -451,6 +451,25 @@ ipcMain.handle('files:open', (_, filePath) => {
   shell.openPath(filePath);
 });
 
+ipcMain.handle('files:read', (_, filePath) => {
+  try {
+    const stat = fs.statSync(filePath);
+    if (stat.size > 1024 * 1024) return { error: 'File too large (>1MB)' };
+    return { content: fs.readFileSync(filePath, 'utf-8'), name: path.basename(filePath) };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('files:write', (_, filePath, content) => {
+  try {
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
 ipcMain.handle('files:reveal', (_, filePath) => {
   shell.showItemInFolder(filePath);
 });
@@ -532,12 +551,231 @@ ipcMain.handle('agent:write-starter-files', (_, cwd, files) => {
   return true;
 });
 
+ipcMain.handle('agent:clone-github', async (_, url) => {
+  // Parse GitHub URL to extract owner/repo (and optional subpath)
+  // Supports: https://github.com/user/repo, https://github.com/user/repo/tree/branch/path
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?(?:\/tree\/([^\/]+)(?:\/(.+))?)?$/);
+  if (!match) return { error: 'Invalid GitHub URL. Expected: https://github.com/owner/repo' };
+
+  const [, owner, repo, branch, subpath] = match;
+  const agentName = subpath ? path.basename(subpath) : repo;
+  const targetDir = path.join(os.homedir(), 'agents', agentName);
+
+  // Don't overwrite existing directory
+  if (fs.existsSync(targetDir)) {
+    return { error: `Directory already exists: ~/agents/${agentName}` };
+  }
+
+  const env = getShellEnvironment();
+  const gitPath = resolveCommand('git');
+
+  try {
+    // Clone the repo (shallow)
+    const cloneArgs = ['clone', '--depth', '1'];
+    if (branch) cloneArgs.push('--branch', branch);
+    cloneArgs.push(`https://github.com/${owner}/${repo}.git`);
+
+    if (subpath) {
+      // Clone to temp dir first, then move the subpath
+      const tmpDir = path.join(os.tmpdir(), `jents-clone-${Date.now()}`);
+      cloneArgs.push(tmpDir);
+      execSync(`"${gitPath}" ${cloneArgs.map(a => `"${a}"`).join(' ')}`, {
+        env, timeout: 30000, stdio: 'pipe',
+      });
+      const srcDir = path.join(tmpDir, subpath);
+      if (!fs.existsSync(srcDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        return { error: `Path not found in repo: ${subpath}` };
+      }
+      fs.cpSync(srcDir, targetDir, { recursive: true });
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } else {
+      cloneArgs.push(targetDir);
+      execSync(`"${gitPath}" ${cloneArgs.map(a => `"${a}"`).join(' ')}`, {
+        env, timeout: 30000, stdio: 'pipe',
+      });
+    }
+
+    // Detect CLAUDE.md
+    const hasClaude = fs.existsSync(path.join(targetDir, 'CLAUDE.md'));
+    // Detect team.json (might define multiple agents)
+    const hasTeamJson = fs.existsSync(path.join(targetDir, 'team.json'));
+
+    return {
+      name: agentName,
+      cwd: `~/agents/${agentName}`,
+      hasClaude,
+      hasTeamJson,
+    };
+  } catch (err) {
+    // Clean up on failure
+    try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch {}
+    const msg = err.stderr ? err.stderr.toString().trim() : err.message;
+    return { error: `Clone failed: ${msg}` };
+  }
+});
+
 ipcMain.handle('agent:open-cwd', (_, agentId) => {
   const config = getConfig();
   const agent = config.agents.find(a => a.id === agentId);
   if (agent && agent.cwd) {
     const resolved = agent.cwd.replace(/^~/, os.homedir());
     shell.openPath(resolved);
+  }
+});
+
+// --- Crons / Scheduled Tasks ---
+
+function isAgentRelatedPlist(plistPath) {
+  try {
+    const json = execSync(`plutil -convert json -o - "${plistPath}"`, { encoding: 'utf-8', timeout: 3000 });
+    const data = JSON.parse(json);
+    const label = data.Label || '';
+    const args = (data.ProgramArguments || []).join(' ');
+    const cwd = data.WorkingDirectory || '';
+    const home = os.homedir();
+
+    // Match by known prefixes or paths under ~/agents/
+    if (label.startsWith('com.tmt.') || label.startsWith('com.telegram-bridge.')) return data;
+    if (args.includes(path.join(home, 'agents'))) return data;
+    if (cwd.startsWith(path.join(home, 'agents'))) return data;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function humanLabel(label) {
+  // com.tmt.daily-standup -> Daily Standup
+  // com.telegram-bridge.tmt-cos -> Telegram: tmt-cos
+  if (label.startsWith('com.telegram-bridge.')) {
+    return 'Telegram: ' + label.replace('com.telegram-bridge.', '');
+  }
+  const short = label.replace(/^com\.tmt\./, '');
+  return short.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function humanSchedule(data) {
+  if (data.KeepAlive) return 'Always running';
+  const interval = data.StartCalendarInterval;
+  if (!interval) return 'Manual';
+
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const fmt = (entry) => {
+    const h = entry.Hour != null ? entry.Hour : null;
+    const m = entry.Minute != null ? entry.Minute : 0;
+    const d = entry.Weekday != null ? days[entry.Weekday] : null;
+    const timeStr = h != null ? `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, '0')}${h >= 12 ? 'pm' : 'am'}` : '';
+    if (d && timeStr) return `${d} at ${timeStr}`;
+    if (timeStr) return `Daily at ${timeStr}`;
+    if (d) return `Every ${d}`;
+    return 'Scheduled';
+  };
+
+  if (Array.isArray(interval)) {
+    return interval.map(fmt).join(', ');
+  }
+  return fmt(interval);
+}
+
+ipcMain.handle('crons:list', () => {
+  const launchDir = path.join(os.homedir(), 'Library', 'LaunchAgents');
+  const results = [];
+
+  try {
+    const files = fs.readdirSync(launchDir).filter(f => f.endsWith('.plist'));
+    // Get all loaded jobs in one call
+    let loadedJobs = {};
+    try {
+      const listOutput = execSync('launchctl list', { encoding: 'utf-8', timeout: 5000 });
+      for (const line of listOutput.split('\n')) {
+        const parts = line.split('\t');
+        if (parts.length >= 3) {
+          const pid = parts[0].trim();
+          const exitCode = parts[1].trim();
+          const label = parts[2].trim();
+          loadedJobs[label] = { pid: pid === '-' ? null : parseInt(pid), exitCode: exitCode === '-' ? null : parseInt(exitCode) };
+        }
+      }
+    } catch {}
+
+    for (const file of files) {
+      const fullPath = path.join(launchDir, file);
+      const data = isAgentRelatedPlist(fullPath);
+      if (!data) continue;
+
+      const label = data.Label;
+      const loaded = loadedJobs[label] || null;
+      const logPath = data.StandardOutPath || data.StandardErrorPath || null;
+
+      results.push({
+        label,
+        name: humanLabel(label),
+        plistPath: fullPath,
+        schedule: humanSchedule(data),
+        keepAlive: !!data.KeepAlive,
+        command: (data.ProgramArguments || []).join(' '),
+        cwd: data.WorkingDirectory || null,
+        logPath,
+        loaded: !!loaded,
+        running: loaded ? loaded.pid != null : false,
+        pid: loaded ? loaded.pid : null,
+        lastExitCode: loaded ? loaded.exitCode : null,
+      });
+    }
+  } catch {}
+
+  return results;
+});
+
+ipcMain.handle('crons:toggle', (_, label, enable) => {
+  const plistPath = path.join(os.homedir(), 'Library', 'LaunchAgents', `${label}.plist`);
+  if (!fs.existsSync(plistPath)) return { error: 'Plist not found' };
+
+  try {
+    const cmd = enable ? 'load' : 'unload';
+    execSync(`launchctl ${cmd} "${plistPath}"`, { timeout: 5000, stdio: 'pipe' });
+    return { ok: true };
+  } catch (err) {
+    return { error: err.stderr ? err.stderr.toString().trim() : err.message };
+  }
+});
+
+ipcMain.handle('crons:logs', (_, logPath) => {
+  try {
+    if (!fs.existsSync(logPath)) return '';
+    const stat = fs.statSync(logPath);
+    // Only read last 100KB to avoid huge logs
+    const size = Math.min(stat.size, 100 * 1024);
+    const fd = fs.openSync(logPath, 'r');
+    const buf = Buffer.alloc(size);
+    fs.readSync(fd, buf, 0, size, Math.max(0, stat.size - size));
+    fs.closeSync(fd);
+    return buf.toString('utf-8');
+  } catch {
+    return '';
+  }
+});
+
+ipcMain.handle('crons:history', () => {
+  const historyPath = path.join(os.homedir(), 'agents', 'cron-logs', 'history.log');
+  try {
+    if (!fs.existsSync(historyPath)) return [];
+    const content = fs.readFileSync(historyPath, 'utf-8');
+    const lines = content.trim().split('\n').reverse().slice(0, 50);
+    return lines.map(line => {
+      const parts = line.split(' | ').map(s => s.trim());
+      if (parts.length < 5) return null;
+      return {
+        timestamp: parts[0],
+        status: parts[1],
+        duration: parts[2],
+        agent: parts[3],
+        command: parts.slice(4).join(' | '),
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
   }
 });
 

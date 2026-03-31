@@ -1,7 +1,9 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import { marked } from 'marked';
+import TurndownService from 'turndown';
 
 const { api } = window;
 
@@ -12,8 +14,10 @@ let readerOpen = false;
 let notes = [];
 const terminals = new Map();
 const fitAddons = new Map();
+const searchAddons = new Map();
 const agentStates = new Map();
 const hasUnread = new Map();
+let terminalFontSize = 13;
 
 // --- Theme ---
 const termTheme = {
@@ -172,6 +176,8 @@ async function createStarterPack(pack) {
 }
 
 // --- Sidebar ---
+let draggedAgentId = null;
+
 function renderSidebar() {
   const list = document.getElementById('agent-list');
   list.innerHTML = '';
@@ -181,6 +187,7 @@ function renderSidebar() {
     item.className = 'agent-item';
     item.dataset.agentId = agent.id;
     item.style.setProperty('--agent-color', agent.color);
+    item.draggable = true;
 
     const state = agentStates.get(agent.id) || 'stopped';
 
@@ -222,8 +229,57 @@ function renderSidebar() {
       });
     }
 
+    // Drag-and-drop reordering
+    item.addEventListener('dragstart', (e) => {
+      draggedAgentId = agent.id;
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      draggedAgentId = null;
+      list.querySelectorAll('.agent-item').forEach(el => el.classList.remove('drag-over'));
+    });
+
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (agent.id !== draggedAgentId) {
+        // Clear all, then highlight this one
+        list.querySelectorAll('.agent-item').forEach(el => el.classList.remove('drag-over'));
+        item.classList.add('drag-over');
+      }
+    });
+
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+    });
+
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      item.classList.remove('drag-over');
+      if (!draggedAgentId || draggedAgentId === agent.id) return;
+      reorderAgent(draggedAgentId, agent.id);
+    });
+
     list.appendChild(item);
   }
+}
+
+async function reorderAgent(fromId, toId) {
+  const fromIdx = config.agents.findIndex(a => a.id === fromId);
+  const toIdx = config.agents.findIndex(a => a.id === toId);
+  if (fromIdx < 0 || toIdx < 0) return;
+
+  // Move the agent in the array
+  const [moved] = config.agents.splice(fromIdx, 1);
+  config.agents.splice(toIdx, 0, moved);
+
+  // Persist and re-render
+  await api.saveConfig(config);
+  renderSidebar();
+  if (activeAgentId) selectAgent(activeAgentId);
 }
 
 // --- Terminals ---
@@ -241,9 +297,11 @@ function setupTerminals() {
 }
 
 function initTerminalForAgent(agent, wrapper) {
-  const terminal = new Terminal(TERMINAL_OPTS);
+  const terminal = new Terminal({ ...TERMINAL_OPTS, fontSize: terminalFontSize });
   const fitAddon = new FitAddon();
+  const searchAddon = new SearchAddon();
   terminal.loadAddon(fitAddon);
+  terminal.loadAddon(searchAddon);
   terminal.loadAddon(new WebLinksAddon((event, uri) => {
     api.openExternal(uri);
   }));
@@ -261,6 +319,7 @@ function initTerminalForAgent(agent, wrapper) {
 
   terminals.set(agent.id, terminal);
   fitAddons.set(agent.id, fitAddon);
+  searchAddons.set(agent.id, searchAddon);
 
   if (agentStates.get(agent.id) !== 'running') {
     terminal.writeln('');
@@ -366,7 +425,7 @@ function saveNotesToStorage() {
 }
 
 function closeAllPanels() {
-  for (const id of ['logs-panel', 'files-panel', 'notepad-panel', 'configure-panel', 'help-panel']) {
+  for (const id of ['logs-panel', 'files-panel', 'notepad-panel', 'configure-panel', 'help-panel', 'crons-panel']) {
     document.getElementById(id).classList.add('hidden');
   }
 }
@@ -506,11 +565,11 @@ function escapeHtml(str) {
 
 // --- Permission Modes ---
 const PERMISSION_MODES = [
-  { id: 'default',           label: 'Default',      desc: 'Manual approval for each action' },
-  { id: 'auto',              label: 'Auto',          desc: 'AI classifiers approve safe actions' },
-  { id: 'acceptEdits',       label: 'Accept Edits',  desc: 'Auto-accept file edits only' },
-  { id: 'plan',              label: 'Plan',          desc: 'Plan only, no execution' },
-  { id: 'bypassPermissions', label: 'YOLO',          desc: 'Skip all permission checks' },
+  { id: 'default',           label: 'Manual',        desc: 'Approve every action manually' },
+  { id: 'auto',              label: 'Auto',           desc: 'AI classifiers approve safe actions' },
+  { id: 'acceptEdits',       label: 'Accept Edits',   desc: 'Auto-accept file edits only' },
+  { id: 'plan',              label: 'Plan',            desc: 'Plan only, no execution' },
+  { id: 'bypassPermissions', label: 'YOLO',            desc: 'Skip all permission checks' },
 ];
 
 function getAgentMode(agentId) {
@@ -524,6 +583,7 @@ function updateModeBadge(agentId) {
   const badge = document.getElementById('mode-badge');
   badge.textContent = def.label;
   badge.className = `mode-${mode}`;
+  badge.title = `Permission mode: ${def.label} (saved per agent, applied on start)`;
   // YOLO warning bar
   const toolbar = document.getElementById('toolbar');
   toolbar.classList.toggle('yolo-active', mode === 'bypassPermissions');
@@ -537,8 +597,9 @@ function renderModeMenu() {
   for (const mode of PERMISSION_MODES) {
     const item = document.createElement('button');
     item.className = `mode-menu-item${mode.id === currentMode ? ' active' : ''}`;
+    const savedIndicator = mode.id === currentMode ? '<span class="mode-saved">saved</span>' : '';
     item.innerHTML = `
-      <span class="mode-menu-label">${mode.label}</span>
+      <span class="mode-menu-label">${mode.label} ${savedIndicator}</span>
       <span class="mode-menu-desc">${mode.desc}</span>
     `;
     item.addEventListener('click', (e) => {
@@ -554,8 +615,11 @@ async function setAgentMode(agentId, mode) {
   const updated = await api.setAgentField(agentId, 'mode', mode);
   if (updated) config = updated;
   updateModeBadge(agentId);
+  const def = PERMISSION_MODES.find(m => m.id === mode);
   if (mode === 'bypassPermissions') {
     showToast('YOLO mode: all permission checks bypassed', 'warn');
+  } else {
+    showToast(`${def.label} mode saved for this agent`, 'success');
   }
 }
 
@@ -696,7 +760,7 @@ async function loadFiles() {
     const size = formatSize(file.size);
 
     item.innerHTML = `
-      <div class="file-icon">${ext.slice(0, 3)}</div>
+      <div class="file-icon" data-ext="${ext}">${ext.slice(0, 3)}</div>
       <div class="file-details">
         <div class="file-name">${file.name}</div>
         <div class="file-path">${file.relativePath}</div>
@@ -713,10 +777,14 @@ async function loadFiles() {
       </div>
     `;
 
-    // Click to open file
+    // Click to open file - render .md natively, open others externally
     item.addEventListener('click', (e) => {
       if (e.target.closest('.file-action-btn')) return;
-      api.openFile(file.path);
+      if (file.name.endsWith('.md')) {
+        openMarkdownFile(file.path);
+      } else {
+        api.openFile(file.path);
+      }
     });
 
     // Reveal in Finder
@@ -789,6 +857,13 @@ function extractMarkdown(rawText) {
     // Skip progress/status lines
     if (/^(Thinking|Running|Streaming|Connecting)\.\.\.\s*$/.test(trimmed)) continue;
 
+    // Skip Claude Code welcome banner and UI chrome
+    if (/^(Hey!|Hello!|Hi!)?\s*What can I help/i.test(trimmed)) continue;
+    if (/^[⏵⏴►▶]\s*(accept|auto|plan|default|manual|bypassPermissions|YOLO)/i.test(trimmed)) continue;
+    if (/^\s*(high|low|medium)\s*[·•]\s*\/effort/i.test(trimmed)) continue;
+    if (/^(shift\+tab|tab)\s+to\s+(cycle|switch)/i.test(trimmed)) continue;
+    if (/^❯\s*$/.test(trimmed)) continue;
+
     // Strip leading ⏺ bullets (Claude Code action markers)
     const stripped = line.replace(/^\s*⏺\s*/, '');
 
@@ -804,34 +879,188 @@ function extractMarkdown(rawText) {
   return text.trim();
 }
 
+function extractLastResponse(rawText) {
+  // Strip ANSI first to find prompt boundaries reliably
+  const stripped = rawText
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\x1b\][^\x07]*\x07/g, '')
+    .replace(/\x1b\[[\?]?[0-9;]*[a-zA-Z]/g, '')
+    .replace(/\x1b\(B/g, '');
+
+  const lines = stripped.split('\n');
+
+  // Find the last user prompt line that has actual user input after the ❯/> marker
+  // Skip empty prompts (just "❯" with nothing after) and Claude UI chrome
+  let lastPromptIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    // Must have ❯ or > followed by real user text (not just whitespace)
+    if (/^[❯>]\s+\S/.test(trimmed)) {
+      // Skip if it's just the prompt character echoed with no real content
+      const afterPrompt = trimmed.replace(/^[❯>]\s+/, '');
+      if (afterPrompt.length > 0) {
+        lastPromptIdx = i;
+        break;
+      }
+    }
+  }
+
+  if (lastPromptIdx < 0) {
+    // No prompt with user input found - fall back to full buffer
+    return rawText;
+  }
+
+  // Everything after the prompt line is the response
+  let startIdx = lastPromptIdx + 1;
+
+  // Skip blank lines and separator lines after the prompt
+  while (startIdx < lines.length) {
+    const trimmed = lines[startIdx].trim();
+    if (trimmed === '') { startIdx++; continue; }
+    if (/^[─═┄┈╌╍━┅┉╺╸\s]+$/.test(trimmed)) { startIdx++; continue; }
+    break;
+  }
+
+  return lines.slice(startIdx).join('\n');
+}
+
 function openReader() {
   if (!activeAgentId) return;
 
   const rawText = getTerminalText(activeAgentId);
   if (!rawText.trim()) return;
 
-  const markdown = extractMarkdown(rawText);
+  const lastResponse = extractLastResponse(rawText);
+  const markdown = extractMarkdown(lastResponse);
 
-  // Configure marked
-  marked.setOptions({
-    breaks: false,
-    gfm: true,
-  });
+  showReaderContent('Reader View', markdown);
+}
+
+function showReaderContent(title, markdown) {
+  marked.setOptions({ breaks: false, gfm: true });
 
   const html = marked.parse(markdown);
   const contentEl = document.getElementById('reader-content');
   contentEl.innerHTML = `<div class="prose">${html}</div>`;
-
-  // Store raw markdown for copy
   contentEl.dataset.rawMarkdown = markdown;
+  contentEl.classList.remove('editing');
+  readerEditing = false;
+
+  // Reset toolbar buttons
+  document.getElementById('reader-title').textContent = title;
+  document.getElementById('reader-title').classList.remove('unsaved');
+  document.getElementById('btn-reader-edit').style.display = 'none';
+  document.getElementById('btn-reader-save').style.display = 'none';
+  document.getElementById('btn-reader-cancel-edit').style.display = 'none';
+  document.getElementById('btn-reader-copy').style.display = 'flex';
 
   readerOpen = true;
   document.getElementById('reader').classList.remove('hidden');
 }
 
+let readerFilePath = null;
+let readerEditing = false;
+let readerOriginalContent = '';
+
+async function openMarkdownFile(filePath) {
+  const result = await api.readFile(filePath);
+  if (result.error) {
+    showToast(result.error, 'error');
+    return;
+  }
+  readerFilePath = filePath;
+  readerOriginalContent = result.content;
+  showReaderContent(result.name, result.content);
+  // Show edit button for files (not terminal output)
+  document.getElementById('btn-reader-edit').style.display = 'flex';
+}
+
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+  bulletListMarker: '-',
+});
+
+function enterReaderEdit() {
+  if (!readerFilePath) return;
+  readerEditing = true;
+
+  const contentEl = document.getElementById('reader-content');
+  const proseEl = contentEl.querySelector('.prose');
+  if (proseEl) {
+    proseEl.contentEditable = 'true';
+    proseEl.focus();
+  }
+
+  // Track changes
+  contentEl.addEventListener('input', onReaderContentChange);
+
+  // Swap toolbar buttons
+  document.getElementById('btn-reader-edit').style.display = 'none';
+  document.getElementById('btn-reader-copy').style.display = 'none';
+  document.getElementById('btn-reader-save').style.display = 'flex';
+  document.getElementById('btn-reader-cancel-edit').style.display = 'flex';
+
+  contentEl.classList.add('editing');
+}
+
+function onReaderContentChange() {
+  document.getElementById('reader-title').classList.add('unsaved');
+}
+
+async function saveReaderEdit() {
+  if (!readerFilePath) return;
+  const contentEl = document.getElementById('reader-content');
+  const proseEl = contentEl.querySelector('.prose');
+  if (!proseEl) return;
+
+  // Convert HTML back to markdown
+  const markdown = turndown.turndown(proseEl.innerHTML);
+
+  const result = await api.writeFile(readerFilePath, markdown);
+  if (result.error) {
+    showToast('Save failed: ' + result.error, 'error');
+    return;
+  }
+
+  readerOriginalContent = markdown;
+  contentEl.dataset.rawMarkdown = markdown;
+  document.getElementById('reader-title').classList.remove('unsaved');
+  showToast('Saved', 'success');
+}
+
+function cancelReaderEdit() {
+  readerEditing = false;
+
+  const contentEl = document.getElementById('reader-content');
+  contentEl.removeEventListener('input', onReaderContentChange);
+  contentEl.classList.remove('editing');
+
+  // Re-render original content (discard edits)
+  marked.setOptions({ breaks: false, gfm: true });
+  contentEl.innerHTML = `<div class="prose">${marked.parse(readerOriginalContent)}</div>`;
+  contentEl.dataset.rawMarkdown = readerOriginalContent;
+
+  // Restore toolbar buttons
+  document.getElementById('btn-reader-edit').style.display = readerFilePath ? 'flex' : 'none';
+  document.getElementById('btn-reader-copy').style.display = 'flex';
+  document.getElementById('btn-reader-save').style.display = 'none';
+  document.getElementById('btn-reader-cancel-edit').style.display = 'none';
+
+  document.getElementById('reader-title').classList.remove('unsaved');
+}
+
 function closeReader() {
+  const contentEl = document.getElementById('reader-content');
+  contentEl.removeEventListener('input', onReaderContentChange);
+  contentEl.classList.remove('editing');
+
   readerOpen = false;
+  readerEditing = false;
+  readerFilePath = null;
+  readerOriginalContent = '';
   document.getElementById('reader').classList.add('hidden');
+  document.getElementById('reader-title').classList.remove('unsaved');
   // Return focus to terminal
   if (activeAgentId) {
     const terminal = terminals.get(activeAgentId);
@@ -954,6 +1183,9 @@ function setupEventListeners() {
   document.getElementById('btn-reader').addEventListener('click', toggleReader);
   document.getElementById('btn-reader-close').addEventListener('click', closeReader);
   document.getElementById('btn-reader-copy').addEventListener('click', copyReaderContent);
+  document.getElementById('btn-reader-edit').addEventListener('click', enterReaderEdit);
+  document.getElementById('btn-reader-save').addEventListener('click', saveReaderEdit);
+  document.getElementById('btn-reader-cancel-edit').addEventListener('click', cancelReaderEdit);
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);
   document.getElementById('btn-close-configure').addEventListener('click', () => {
     document.getElementById('configure-panel').classList.add('hidden');
@@ -961,6 +1193,19 @@ function setupEventListeners() {
   document.getElementById('btn-config-guide').addEventListener('click', () => {
     toggleHelp();
   });
+  document.getElementById('btn-crons').addEventListener('click', toggleCrons);
+  document.getElementById('btn-close-crons').addEventListener('click', () => {
+    document.getElementById('crons-panel').classList.add('hidden');
+  });
+  document.getElementById('btn-crons-refresh').addEventListener('click', () => {
+    if (cronsActiveTab === 'jobs') loadCronsList();
+    else loadCronsHistory();
+  });
+  document.getElementById('btn-crons-log-back').addEventListener('click', closeCronLog);
+  document.querySelectorAll('.crons-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchCronsTab(tab.dataset.tab));
+  });
+
   document.getElementById('btn-files').addEventListener('click', toggleFiles);
   document.getElementById('btn-close-files').addEventListener('click', () => {
     document.getElementById('files-panel').classList.add('hidden');
@@ -975,6 +1220,8 @@ function setupEventListeners() {
     document.getElementById('logs-panel').classList.add('hidden');
   });
   document.getElementById('btn-logs-back').addEventListener('click', showLogsList);
+  document.getElementById('btn-log-copy').addEventListener('click', copyLogContent);
+  document.getElementById('btn-log-send').addEventListener('click', sendLogToAgent);
 
   // Notification click -> focus agent
   api.onFocus((agentId) => {
@@ -1064,12 +1311,22 @@ function setupEventListeners() {
 
   // Global keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    // Escape closes overlays
+    // Escape closes overlays in priority order
     if (e.key === 'Escape') {
+      if (commandPaletteOpen) { closeCommandPalette(); return; }
+      if (terminalSearchOpen) { closeTerminalSearch(); return; }
       if (readerOpen) { closeReader(); return; }
     }
 
     if (e.metaKey || e.ctrlKey) {
+      // Cmd+K command palette
+      if (e.key === 'k') {
+        e.preventDefault();
+        if (commandPaletteOpen) closeCommandPalette();
+        else openCommandPalette();
+        return;
+      }
+
       // Cmd+1-9 switch agents
       const num = parseInt(e.key);
       if (num >= 1 && num <= config.agents.length) {
@@ -1099,10 +1356,52 @@ function setupEventListeners() {
         return;
       }
 
-      // Cmd+F toggle files
+      // Cmd+F: terminal search if focused on terminal, otherwise file manager
       if (e.key === 'f') {
         e.preventDefault();
+        const filesOpen = !document.getElementById('files-panel').classList.contains('hidden');
+        if (filesOpen) {
+          document.getElementById('files-panel').classList.add('hidden');
+        } else if (terminalSearchOpen) {
+          closeTerminalSearch();
+        } else {
+          openTerminalSearch();
+        }
+        return;
+      }
+
+      // Cmd+Shift+F for file manager
+      if (e.key === 'F' && e.shiftKey) {
+        e.preventDefault();
         toggleFiles();
+        return;
+      }
+
+      // Cmd+S save in reader edit mode
+      if (e.key === 's' && readerEditing) {
+        e.preventDefault();
+        saveReaderEdit();
+        return;
+      }
+
+      // Cmd+= / Cmd++ increase font
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault();
+        changeFontSize(1);
+        return;
+      }
+
+      // Cmd+- decrease font
+      if (e.key === '-') {
+        e.preventDefault();
+        changeFontSize(-1);
+        return;
+      }
+
+      // Cmd+0 reset font
+      if (e.key === '0') {
+        e.preventDefault();
+        resetFontSize();
         return;
       }
 
@@ -1264,6 +1563,8 @@ async function toggleLogs() {
 
 async function showLogsList() {
   const logs = await api.getLogs(activeAgentId);
+  allLogs = logs; // Cache for search
+  document.getElementById('logs-search-input').value = '';
   const listEl = document.getElementById('logs-list');
   const viewerEl = document.getElementById('log-viewer');
   const backBtn = document.getElementById('btn-logs-back');
@@ -1303,6 +1604,8 @@ async function showLogsList() {
   }
 }
 
+let currentLogMarkdown = '';
+
 async function viewLog(log) {
   const content = await api.readLog(log.path);
   const viewerEl = document.getElementById('log-viewer');
@@ -1310,7 +1613,14 @@ async function viewLog(log) {
   const backBtn = document.getElementById('btn-logs-back');
   const titleEl = document.getElementById('logs-title');
 
-  document.getElementById('log-content').textContent = stripAnsi(content);
+  // Clean the log using the same pipeline as Reader View
+  currentLogMarkdown = extractMarkdown(content);
+
+  // Render as formatted markdown
+  marked.setOptions({ breaks: false, gfm: true });
+  const contentEl = document.getElementById('log-content');
+  contentEl.innerHTML = marked.parse(currentLogMarkdown);
+
   listEl.style.display = 'none';
   viewerEl.classList.remove('hidden');
   backBtn.classList.remove('hidden');
@@ -1321,6 +1631,42 @@ async function viewLog(log) {
   }) + ' at ' + date.toLocaleTimeString(undefined, {
     hour: 'numeric', minute: '2-digit',
   });
+}
+
+async function copyLogContent() {
+  if (!currentLogMarkdown) return;
+  const btn = document.getElementById('btn-log-copy');
+  try {
+    await navigator.clipboard.writeText(currentLogMarkdown);
+    const span = btn.querySelector('span');
+    span.textContent = 'Copied!';
+    setTimeout(() => { span.textContent = 'Copy'; }, 1500);
+  } catch {
+    showToast('Copy failed', 'error');
+  }
+}
+
+function sendLogToAgent() {
+  if (!currentLogMarkdown || !activeAgentId) return;
+
+  const prefix = 'Here is a previous session transcript for reference:\n\n---\n\n';
+  const text = prefix + currentLogMarkdown;
+  const bracketedText = `\x1b[200~${text}\x1b[201~\r`;
+
+  const running = agentStates.get(activeAgentId) === 'running';
+  if (!running) {
+    startAgent(activeAgentId).then(() => {
+      setTimeout(() => api.write(activeAgentId, bracketedText), 800);
+    });
+  } else {
+    api.write(activeAgentId, bracketedText);
+  }
+
+  // Close logs panel and focus terminal
+  document.getElementById('logs-panel').classList.add('hidden');
+  const terminal = terminals.get(activeAgentId);
+  if (terminal) terminal.focus();
+  showToast('Session transcript sent to agent', 'success');
 }
 
 // --- Helpers ---
@@ -1337,37 +1683,12 @@ function stripAnsi(str) {
 // --- Copy Last Response ---
 async function copyLastResponse() {
   if (!activeAgentId) return;
-  const terminal = terminals.get(activeAgentId);
-  if (!terminal) return;
 
-  const buffer = terminal.buffer.active;
-  const lines = [];
-  for (let i = 0; i < buffer.length; i++) {
-    const line = buffer.getLine(i);
-    if (line) lines.push(line.translateToString(true));
-  }
+  const rawText = getTerminalText(activeAgentId);
+  if (!rawText.trim()) return;
 
-  // Walk backwards to find the last prompt boundary (common Claude Code patterns)
-  let endIdx = lines.length - 1;
-  // Trim trailing blanks
-  while (endIdx > 0 && lines[endIdx].trim() === '') endIdx--;
-
-  let startIdx = endIdx;
-  for (let i = endIdx; i >= 0; i--) {
-    const line = lines[i].trim();
-    // Claude Code prompt indicators
-    if (/^[>❯\$]/.test(line) || /^╭─/.test(line) || /^human:?\s*$/i.test(line)) {
-      startIdx = i + 1;
-      break;
-    }
-    startIdx = i;
-  }
-
-  const text = lines.slice(startIdx, endIdx + 1).join('\n')
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
-    .replace(/\x1b\][^\x07]*\x07/g, '')
-    .replace(/\x1b\(B/g, '')
-    .trim();
+  const lastResponse = extractLastResponse(rawText);
+  const text = extractMarkdown(lastResponse);
 
   if (!text) return;
 
@@ -1590,7 +1911,186 @@ async function duplicateAgent() {
   selectAgent(newId);
 }
 
-function removeAgent(agentId) {
+// --- Crons Panel ---
+let cronsActiveTab = 'jobs';
+
+async function toggleCrons() {
+  const panel = document.getElementById('crons-panel');
+  if (!panel.classList.contains('hidden')) {
+    panel.classList.add('hidden');
+    return;
+  }
+  closeAllPanels();
+  await loadCronsList();
+  panel.classList.remove('hidden');
+}
+
+async function loadCronsList() {
+  const jobs = await api.listCrons();
+  const container = document.getElementById('crons-jobs');
+  container.innerHTML = '';
+
+  if (jobs.length === 0) {
+    container.innerHTML = '<div class="crons-empty"><p>No scheduled tasks found</p><p style="font-size:11px;margin-top:4px">Add launchd plists to ~/Library/LaunchAgents/</p></div>';
+    return;
+  }
+
+  for (const job of jobs) {
+    const item = document.createElement('div');
+    item.className = 'cron-item';
+
+    let statusClass = 'stopped';
+    if (job.running) statusClass = 'running';
+    else if (job.loaded && job.lastExitCode != null && job.lastExitCode !== 0) statusClass = 'error';
+    else if (job.loaded) statusClass = 'loaded';
+
+    const toggleLabel = job.loaded ? 'On' : 'Off';
+    const toggleClass = job.loaded ? 'active' : '';
+
+    item.innerHTML = `
+      <div class="cron-item-header">
+        <div class="cron-status-dot ${statusClass}"></div>
+        <span class="cron-item-name">${escapeHtml(job.name)}</span>
+        <button class="cron-toggle-btn ${toggleClass}" data-label="${escapeHtml(job.label)}" data-loaded="${job.loaded}">${toggleLabel}</button>
+      </div>
+      <div class="cron-item-meta">
+        <span class="cron-item-schedule">${escapeHtml(job.schedule)}</span>
+        ${job.pid ? `<span>PID ${job.pid}</span>` : ''}
+      </div>
+    `;
+
+    // Toggle on/off
+    const toggleBtn = item.querySelector('.cron-toggle-btn');
+    toggleBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const label = toggleBtn.dataset.label;
+      const currentlyLoaded = toggleBtn.dataset.loaded === 'true';
+      const result = await api.toggleCron(label, !currentlyLoaded);
+      if (result.error) {
+        showToast(result.error, 'error');
+      } else {
+        showToast(currentlyLoaded ? 'Job unloaded' : 'Job loaded', 'success');
+        await loadCronsList();
+      }
+    });
+
+    // Click to view logs
+    if (job.logPath) {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.cron-toggle-btn')) return;
+        viewCronLog(job.name, job.logPath);
+      });
+    }
+
+    container.appendChild(item);
+  }
+}
+
+async function loadCronsHistory() {
+  const history = await api.cronHistory();
+  const container = document.getElementById('crons-history');
+  container.innerHTML = '';
+
+  if (history.length === 0) {
+    container.innerHTML = '<div class="crons-empty"><p>No run history</p></div>';
+    return;
+  }
+
+  for (const entry of history) {
+    const item = document.createElement('div');
+    item.className = 'cron-history-item';
+
+    let badgeClass = 'start';
+    if (entry.status === 'OK') badgeClass = 'ok';
+    else if (entry.status.startsWith('FAIL')) badgeClass = 'fail';
+    else if (entry.status === 'SKIPPED') badgeClass = 'skip';
+    else if (entry.status === 'START') badgeClass = 'start';
+
+    // Format timestamp to relative or short
+    const date = new Date(entry.timestamp);
+    const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    item.innerHTML = `
+      <span class="cron-history-time">${dateStr}</span>
+      <span class="cron-history-agent">${escapeHtml(entry.agent)}</span>
+      <span class="cron-badge ${badgeClass}">${escapeHtml(entry.status)}</span>
+      <span class="cron-history-duration">${entry.duration !== '-' ? entry.duration : ''}</span>
+    `;
+
+    container.appendChild(item);
+  }
+}
+
+async function viewCronLog(name, logPath) {
+  const content = await api.cronLogs(logPath);
+  document.getElementById('crons-log-title').textContent = name;
+  document.getElementById('crons-log-content').textContent = content || '(empty)';
+
+  document.getElementById('crons-jobs').style.display = 'none';
+  document.getElementById('crons-history').style.display = 'none';
+  document.getElementById('crons-tabs').style.display = 'none';
+  document.getElementById('crons-log-viewer').classList.remove('hidden');
+}
+
+function closeCronLog() {
+  document.getElementById('crons-log-viewer').classList.add('hidden');
+  document.getElementById('crons-tabs').style.display = '';
+  switchCronsTab(cronsActiveTab);
+}
+
+function switchCronsTab(tab) {
+  cronsActiveTab = tab;
+  const jobsEl = document.getElementById('crons-jobs');
+  const historyEl = document.getElementById('crons-history');
+
+  document.querySelectorAll('.crons-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+
+  if (tab === 'jobs') {
+    jobsEl.style.display = '';
+    historyEl.style.display = 'none';
+    loadCronsList();
+  } else {
+    jobsEl.style.display = 'none';
+    historyEl.style.display = '';
+    loadCronsHistory();
+  }
+}
+
+// --- Branded Confirm Modal ---
+let confirmResolve = null;
+
+function showConfirm(title, message, okLabel = 'Remove') {
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    document.getElementById('confirm-modal-title').textContent = title;
+    document.getElementById('confirm-modal-message').textContent = message;
+    document.getElementById('btn-confirm-ok').textContent = okLabel;
+    document.getElementById('confirm-modal').classList.remove('hidden');
+  });
+}
+
+function closeConfirm(result) {
+  document.getElementById('confirm-modal').classList.add('hidden');
+  if (confirmResolve) {
+    confirmResolve(result);
+    confirmResolve = null;
+  }
+}
+
+async function removeAgent(agentId, skipConfirm = false) {
+  if (!skipConfirm) {
+    const agent = config.agents.find(a => a.id === agentId);
+    const name = agent ? agent.name : agentId;
+    const confirmed = await showConfirm(
+      `Remove ${name}?`,
+      'This removes the agent from Jents but does not delete its working directory or files.'
+    );
+    if (!confirmed) return;
+  }
+
   // Kill if running
   api.kill(agentId);
   agentStates.delete(agentId);
@@ -2053,6 +2553,22 @@ const MCP_TEMPLATES = [
     },
     setupNote: 'Install workspace-mcp and run setup first.',
   },
+  {
+    id: 'linear',
+    name: 'Linear',
+    desc: 'Issues, projects, cycles, teams',
+    docsUrl: 'https://github.com/anthropics/linear-mcp-server',
+    config: {
+      type: 'stdio',
+      command: 'npx',
+      args: ['-y', '@anthropic/linear-mcp-server'],
+      env: { LINEAR_API_KEY: '' },
+    },
+    envLabels: {
+      LINEAR_API_KEY: 'API Key (lin_api_...)',
+    },
+    setupNote: 'Create a personal API key at linear.app/settings/api.',
+  },
 ];
 
 // --- Help Panel ---
@@ -2172,6 +2688,7 @@ function renderTemplateSelector() {
 
 function openAddAgentModal() {
   document.getElementById('add-agent-name').value = '';
+  document.getElementById('github-url-input').value = '';
   const cwdInput = document.getElementById('add-agent-cwd');
   cwdInput.value = '';
   delete cwdInput.dataset.manual;
@@ -2269,6 +2786,78 @@ async function confirmAddAgent() {
   showToast(`${shortName} added`, 'success');
 }
 
+// --- Import from GitHub ---
+async function importFromGithub() {
+  const urlInput = document.getElementById('github-url-input');
+  const url = urlInput.value.trim();
+  if (!url) {
+    showToast('Paste a GitHub URL first', 'error');
+    urlInput.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-github-import');
+  btn.textContent = 'Cloning...';
+  btn.disabled = true;
+
+  try {
+    const result = await api.cloneGithub(url);
+
+    if (result.error) {
+      showToast(result.error, 'error');
+      btn.textContent = 'Import';
+      btn.disabled = false;
+      return;
+    }
+
+    // Generate agent details from clone result
+    const name = result.name.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const id = result.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const firstWord = name.split(/\s+/)[0];
+    const shortName = firstWord.length <= 4 ? firstWord.toUpperCase() : firstWord.slice(0, 4).toUpperCase();
+
+    // Check for duplicate
+    if (config.agents.some(a => a.id === id)) {
+      showToast(`Agent "${id}" already exists`, 'error');
+      btn.textContent = 'Import';
+      btn.disabled = false;
+      return;
+    }
+
+    const color = PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+
+    const newAgent = {
+      id,
+      name,
+      shortName,
+      cwd: result.cwd,
+      command: 'claude',
+      color,
+      channels: [],
+    };
+
+    const updated = await api.addAgent(newAgent);
+    if (updated) config = updated;
+
+    agentStates.set(id, 'stopped');
+    hasUnread.set(id, false);
+    createTerminalForAgent(newAgent);
+
+    showMainUI();
+    renderSidebar();
+    selectAgent(id);
+    closeAddAgentModal();
+
+    const extras = [];
+    if (result.hasClaude) extras.push('CLAUDE.md detected');
+    showToast(`${shortName} imported from GitHub${extras.length ? ' - ' + extras.join(', ') : ''}`, 'success');
+  } finally {
+    btn.textContent = 'Import';
+    btn.disabled = false;
+    urlInput.value = '';
+  }
+}
+
 // --- Unified Configure Panel ---
 let configureMcpConfig = null;
 
@@ -2332,7 +2921,7 @@ async function renderConfigurePanel() {
   deleteBtn.addEventListener('click', () => {
     if (deleteArmed) {
       clearTimeout(deleteTimeout);
-      removeAgent(activeAgentId);
+      removeAgent(activeAgentId, true);
       document.getElementById('configure-panel').classList.add('hidden');
       return;
     }
@@ -2635,14 +3224,37 @@ async function submitBug() {
   const text = input.value.trim();
   if (!text) return;
 
+  // Save locally as backup
   await api.saveBug({
     description: text,
     agent: activeAgentId || null,
     timestamp: new Date().toISOString(),
   });
 
+  // Build context for the GitHub issue
+  const agent = activeAgentId ? config.agents.find(a => a.id === activeAgentId) : null;
+  const agentContext = agent ? `${agent.name} (${agent.id})` : 'None';
+  const mode = agent ? (agent.mode || 'default') : 'n/a';
+
+  const title = text.length > 60 ? text.slice(0, 60) + '...' : text;
+  const body = [
+    `## Bug Report`,
+    ``,
+    text,
+    ``,
+    `## Context`,
+    `- **App version**: v1.0.0-alpha`,
+    `- **Active agent**: ${agentContext}`,
+    `- **Permission mode**: ${mode}`,
+    `- **Platform**: ${navigator.platform}`,
+    `- **Timestamp**: ${new Date().toISOString()}`,
+  ].join('\n');
+
+  const issueUrl = `https://github.com/nckobrien-arch/jents/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=bug`;
+  api.openExternal(issueUrl);
+
   closeBugModal();
-  showToast('Bug report saved', 'success');
+  showToast('Opening GitHub to file the issue', 'success');
 }
 
 // --- Sidebar Toggle ---
@@ -2672,6 +3284,11 @@ document.getElementById('btn-browse-folder').addEventListener('click', async () 
   const folder = await api.browseFolder();
   if (folder) document.getElementById('add-agent-cwd').value = folder;
 });
+
+document.getElementById('btn-github-import').addEventListener('click', importFromGithub);
+document.getElementById('github-url-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); importFromGithub(); }
+});
 document.getElementById('add-agent-name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); confirmAddAgent(); }
   if (e.key === 'Escape') closeAddAgentModal();
@@ -2690,6 +3307,10 @@ document.getElementById('add-agent-cwd').addEventListener('input', () => {
 document.getElementById('btn-close-help').addEventListener('click', () => {
   document.getElementById('help-panel').classList.add('hidden');
 });
+document.getElementById('btn-confirm-cancel').addEventListener('click', () => closeConfirm(false));
+document.getElementById('btn-confirm-ok').addEventListener('click', () => closeConfirm(true));
+document.getElementById('confirm-modal-backdrop').addEventListener('click', () => closeConfirm(false));
+
 document.getElementById('btn-report-bug').addEventListener('click', openBugModal);
 document.getElementById('btn-bug-cancel').addEventListener('click', closeBugModal);
 document.getElementById('btn-bug-submit').addEventListener('click', submitBug);
@@ -2701,6 +3322,214 @@ document.getElementById('bug-input').addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') closeBugModal();
 });
+
+// --- Command Palette ---
+const COMMANDS = [
+  { label: 'Start / Restart Agent', shortcut: ['Cmd', 'R'], action: () => { if (agentStates.get(activeAgentId) === 'running') restartAgent(); else startAgent(activeAgentId); }},
+  { label: 'Resume Last Session', shortcut: [], action: () => resumeAgent(activeAgentId) },
+  { label: 'Stop Agent', shortcut: [], action: () => armStop() },
+  { label: 'Toggle Notepad', shortcut: ['Cmd', 'E'], action: () => toggleNotepad() },
+  { label: 'Toggle Reader View', shortcut: ['Cmd', 'D'], action: () => toggleReader() },
+  { label: 'Toggle File Manager', shortcut: ['Cmd', 'F'], action: () => toggleFiles() },
+  { label: 'Toggle Sidebar', shortcut: ['Cmd', 'B'], action: () => toggleSidebar() },
+  { label: 'Scheduled Tasks', shortcut: [], action: () => toggleCrons() },
+  { label: 'Session History', shortcut: [], action: () => toggleLogs() },
+  { label: 'Configure Agent', shortcut: [], action: () => toggleConfigure() },
+  { label: 'Search Terminal', shortcut: ['Cmd', 'F'], action: () => openTerminalSearch() },
+  { label: 'Add Agent', shortcut: [], action: () => openAddAgentModal() },
+  { label: 'Duplicate Agent', shortcut: [], action: () => duplicateAgent() },
+  { label: 'Clear Terminal', shortcut: [], action: () => armClear() },
+  { label: 'Copy Last Response', shortcut: [], action: () => copyLastResponse() },
+  { label: 'Increase Font Size', shortcut: ['Cmd', '+'], action: () => changeFontSize(1) },
+  { label: 'Decrease Font Size', shortcut: ['Cmd', '-'], action: () => changeFontSize(-1) },
+  { label: 'Reset Font Size', shortcut: ['Cmd', '0'], action: () => resetFontSize() },
+  { label: 'Report Bug', shortcut: [], action: () => openBugModal() },
+  { label: 'Agent Guide', shortcut: [], action: () => toggleHelp() },
+];
+
+let commandPaletteOpen = false;
+let selectedCommandIdx = 0;
+
+function openCommandPalette() {
+  commandPaletteOpen = true;
+  const modal = document.getElementById('command-palette');
+  const input = document.getElementById('command-palette-input');
+  modal.classList.remove('hidden');
+  input.value = '';
+  selectedCommandIdx = 0;
+  renderCommandList('');
+  input.focus();
+}
+
+function closeCommandPalette() {
+  commandPaletteOpen = false;
+  document.getElementById('command-palette').classList.add('hidden');
+}
+
+function renderCommandList(query) {
+  const list = document.getElementById('command-palette-list');
+  list.innerHTML = '';
+
+  const q = query.toLowerCase();
+  const filtered = COMMANDS.filter(c => c.label.toLowerCase().includes(q));
+
+  filtered.forEach((cmd, i) => {
+    const item = document.createElement('div');
+    item.className = `command-item${i === selectedCommandIdx ? ' selected' : ''}`;
+
+    const shortcutHtml = cmd.shortcut.length > 0
+      ? `<div class="command-item-shortcut">${cmd.shortcut.map(k => `<kbd>${k === 'Cmd' ? '\u2318' : k}</kbd>`).join('')}</div>`
+      : '';
+
+    item.innerHTML = `<span class="command-item-label">${cmd.label}</span>${shortcutHtml}`;
+    item.addEventListener('click', () => {
+      closeCommandPalette();
+      cmd.action();
+    });
+    item.addEventListener('mouseenter', () => {
+      selectedCommandIdx = i;
+      list.querySelectorAll('.command-item').forEach((el, j) => el.classList.toggle('selected', j === i));
+    });
+    list.appendChild(item);
+  });
+}
+
+document.getElementById('command-palette-input').addEventListener('input', (e) => {
+  selectedCommandIdx = 0;
+  renderCommandList(e.target.value);
+});
+
+document.getElementById('command-palette-input').addEventListener('keydown', (e) => {
+  const items = document.querySelectorAll('.command-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectedCommandIdx = Math.min(selectedCommandIdx + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('selected', i === selectedCommandIdx));
+    items[selectedCommandIdx]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedCommandIdx = Math.max(selectedCommandIdx - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('selected', i === selectedCommandIdx));
+    items[selectedCommandIdx]?.scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    items[selectedCommandIdx]?.click();
+  } else if (e.key === 'Escape') {
+    closeCommandPalette();
+  }
+});
+
+document.getElementById('command-palette-backdrop').addEventListener('click', closeCommandPalette);
+
+// --- Font Size ---
+function changeFontSize(delta) {
+  terminalFontSize = Math.max(9, Math.min(24, terminalFontSize + delta));
+  for (const [id, terminal] of terminals) {
+    terminal.options.fontSize = terminalFontSize;
+    const fitAddon = fitAddons.get(id);
+    if (fitAddon) fitAddon.fit();
+    if (id === activeAgentId && agentStates.get(id) === 'running') {
+      api.resize(id, terminal.cols, terminal.rows);
+    }
+  }
+}
+
+function resetFontSize() {
+  terminalFontSize = 13;
+  changeFontSize(0);
+}
+
+// --- Terminal Search ---
+let terminalSearchOpen = false;
+
+function openTerminalSearch() {
+  terminalSearchOpen = true;
+  const bar = document.getElementById('terminal-search');
+  const input = document.getElementById('terminal-search-input');
+  bar.classList.remove('hidden');
+  input.value = '';
+  input.focus();
+}
+
+function closeTerminalSearch() {
+  terminalSearchOpen = false;
+  document.getElementById('terminal-search').classList.add('hidden');
+  if (activeAgentId) {
+    const sa = searchAddons.get(activeAgentId);
+    if (sa) sa.clearDecorations();
+    const terminal = terminals.get(activeAgentId);
+    if (terminal) terminal.focus();
+  }
+}
+
+function doTerminalSearch(direction) {
+  if (!activeAgentId) return;
+  const sa = searchAddons.get(activeAgentId);
+  if (!sa) return;
+  const query = document.getElementById('terminal-search-input').value;
+  if (!query) return;
+  if (direction === 'next') sa.findNext(query);
+  else sa.findPrevious(query);
+}
+
+document.getElementById('terminal-search-input').addEventListener('input', () => doTerminalSearch('next'));
+document.getElementById('terminal-search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    doTerminalSearch(e.shiftKey ? 'prev' : 'next');
+  }
+  if (e.key === 'Escape') closeTerminalSearch();
+});
+document.getElementById('btn-search-next').addEventListener('click', () => doTerminalSearch('next'));
+document.getElementById('btn-search-prev').addEventListener('click', () => doTerminalSearch('prev'));
+document.getElementById('btn-search-close').addEventListener('click', closeTerminalSearch);
+
+// --- Session History Search ---
+let allLogs = [];
+
+document.getElementById('logs-search-input').addEventListener('input', async (e) => {
+  const query = e.target.value.toLowerCase();
+  if (allLogs.length === 0 && activeAgentId) {
+    allLogs = await api.getLogs(activeAgentId);
+  }
+  renderFilteredLogs(query);
+});
+
+function renderFilteredLogs(query) {
+  const listEl = document.getElementById('logs-list');
+  listEl.innerHTML = '';
+
+  const filtered = query
+    ? allLogs.filter(log => {
+        const date = new Date(log.mtime);
+        const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        return `${dateStr} ${timeStr}`.toLowerCase().includes(query) || log.name.toLowerCase().includes(query);
+      })
+    : allLogs;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div class="logs-empty"><p>No matching sessions</p></div>';
+    return;
+  }
+
+  for (const log of filtered) {
+    const item = document.createElement('div');
+    item.className = 'log-item';
+
+    const date = new Date(log.mtime);
+    const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const size = formatSize(log.size);
+
+    item.innerHTML = `
+      <div class="log-item-date">${dateStr} at ${timeStr}</div>
+      <div class="log-item-meta"><span>${size}</span></div>
+    `;
+    item.addEventListener('click', () => viewLog(log));
+    listEl.appendChild(item);
+  }
+}
 
 // --- Start ---
 init();

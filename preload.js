@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('api', {
 
   getRecentFiles: () => ipcRenderer.invoke('files:recent'),
   openFile:       (p) => ipcRenderer.invoke('files:open', p),
+  readFile:       (p) => ipcRenderer.invoke('files:read', p),
+  writeFile:      (p, c) => ipcRenderer.invoke('files:write', p, c),
   revealFile:     (p) => ipcRenderer.invoke('files:reveal', p),
 
   getPathForFile: (file) => webUtils.getPathForFile(file),
@@ -33,6 +35,11 @@ contextBridge.exposeInMainWorld('api', {
   writeMcp: (id, config) => ipcRenderer.invoke('mcp:write', id, config),
   saveBug: (bug) => ipcRenderer.invoke('bugs:save', bug),
   openAgentCwd: (id) => ipcRenderer.invoke('agent:open-cwd', id),
+  cloneGithub: (url) => ipcRenderer.invoke('agent:clone-github', url),
+  listCrons: () => ipcRenderer.invoke('crons:list'),
+  toggleCron: (label, enable) => ipcRenderer.invoke('crons:toggle', label, enable),
+  cronLogs: (logPath) => ipcRenderer.invoke('crons:logs', logPath),
+  cronHistory: () => ipcRenderer.invoke('crons:history'),
 
   onData:  (cb) => ipcRenderer.on('agent:data', (_, id, data) => cb(id, data)),
   onExit:  (cb) => ipcRenderer.on('agent:exit', (_, id, code) => cb(id, code)),
