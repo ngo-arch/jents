@@ -661,6 +661,25 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#agent-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+#agent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#agent-list::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+#agent-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-default);
 }
 
 #sidebar.collapsed #sidebar-header {
@@ -2512,6 +2531,10 @@ html, body {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+}
+
+#logs-list.hidden {
+  display: none;
 }
 
 .log-item {

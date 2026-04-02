@@ -429,13 +429,18 @@ function spawnAgent(agentId, opts = {}) {
   });
 
   ptyProcess.onExit(({ exitCode }) => {
-    // Finalize run record before clearing buffer
+    // Guard: if killAgent already cleaned up, skip redundant work
+    // but still send the exit event to the renderer
     const run = finalizeRun(agentId, exitCode);
 
-    logStream.end();
-    logStreams.delete(agentId);
+    const logInfo = logStreams.get(agentId);
+    if (logInfo) {
+      logInfo.stream.end();
+      logStreams.delete(agentId);
+    }
     sessions.delete(agentId);
     clearTimeout(idleTimers.get(agentId));
+    idleTimers.delete(agentId);
     outputSinceIdle.delete(agentId);
     mainWindow?.webContents.send('agent:exit', agentId, exitCode);
 
@@ -466,16 +471,23 @@ function spawnAgent(agentId, opts = {}) {
 function killAgent(agentId) {
   const session = sessions.get(agentId);
   if (session) {
-    session.kill();
+    // Remove from map first so the async onExit handler doesn't
+    // accidentally clean up a re-spawned session with the same id
     sessions.delete(agentId);
+    session.kill();
   }
+  // Eagerly clean up log streams and timers to avoid double-end
   const logInfo = logStreams.get(agentId);
   if (logInfo) {
     logInfo.stream.end();
     logStreams.delete(agentId);
   }
   clearTimeout(idleTimers.get(agentId));
+  idleTimers.delete(agentId);
   outputSinceIdle.delete(agentId);
+  // Finalize any active run since the onExit handler
+  // won't fire reliably after manual kill
+  finalizeRun(agentId, null);
 }
 
 // --- Log Management ---

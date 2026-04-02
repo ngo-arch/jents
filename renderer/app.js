@@ -610,19 +610,19 @@ function renderSidebar() {
     // Get latest run summary for this agent
     const latestRun = runsData.find(r => r.agentId === agent.id && r.summary);
     const summaryHtml = latestRun
-      ? `<div class="agent-item-summary" title="${latestRun.summary.replace(/"/g, '&quot;')}">${truncate(latestRun.summary, 40)} - ${formatTimeAgo(latestRun.endedAt)}</div>`
+      ? `<div class="agent-item-summary" title="${escapeHtml(latestRun.summary)}">${escapeHtml(truncate(latestRun.summary, 40))} - ${formatTimeAgo(latestRun.endedAt)}</div>`
       : '';
 
     item.innerHTML = `
-      <div class="agent-avatar" style="background:${agent.color}">${agent.shortName}</div>
+      <div class="agent-avatar" style="background:${sanitizeColor(agent.color)}">${escapeHtml(agent.shortName)}</div>
       <div class="agent-details">
-        <div class="agent-item-name">${agent.shortName}</div>
-        <div class="agent-item-role">${agent.name}</div>
+        <div class="agent-item-name">${escapeHtml(agent.shortName)}</div>
+        <div class="agent-item-role">${escapeHtml(agent.name)}</div>
         ${summaryHtml}
         ${badgesHtml}
       </div>
       ${removeHtml}
-      <div class="status-dot ${state}" data-status="${agent.id}"></div>
+      <div class="status-dot ${state}" data-status="${escapeHtml(agent.id)}"></div>
     `;
 
     item.addEventListener('click', (e) => {
@@ -782,8 +782,9 @@ function initTerminalForAgent(agent, wrapper) {
 
 // --- Agent Selection ---
 function selectAgent(agentId) {
-  activeAgentId = agentId;
   const agent = config.agents.find(a => a.id === agentId);
+  if (!agent) return;
+  activeAgentId = agentId;
 
   // Clear unread
   hasUnread.set(agentId, false);
@@ -924,20 +925,17 @@ function addNote() {
   input.focus();
 }
 
-function sendNote(noteId) {
+async function sendNote(noteId) {
   const note = notes.find(n => n.id === noteId);
   if (!note || !activeAgentId) return;
 
-  const running = agentStates.get(activeAgentId) === 'running';
   const bracketedText = `\x1b[200~${note.text}\x1b[201~\r`;
 
-  if (!running) {
-    startAgent(activeAgentId).then(() => {
-      setTimeout(() => api.write(activeAgentId, bracketedText), 800);
-    });
-  } else {
-    api.write(activeAgentId, bracketedText);
+  if (agentStates.get(activeAgentId) !== 'running') {
+    await startAgent(activeAgentId);
+    await waitForAgentReady(activeAgentId);
   }
+  api.write(activeAgentId, bracketedText);
 }
 
 function editNote(noteId) {
@@ -1022,7 +1020,15 @@ function renderNotepadList() {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function sanitizeColor(color) {
+  if (!color) return '';
+  // Allow hex colors, rgb/rgba, hsl/hsla, and CSS variables
+  if (/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)|var\(--.+\))$/.test(color)) return color;
+  return '';
 }
 
 // --- Permission Modes ---
@@ -1177,7 +1183,7 @@ async function loadFiles() {
         <div class="file-name">${file.name}</div>
         <div class="file-path">${file.relativePath}</div>
         <div class="file-meta">
-          <span class="file-agent-badge" style="background:${file.agentColor}">${file.agentName}</span>
+          <span class="file-agent-badge" style="background:${sanitizeColor(file.agentColor)}">${escapeHtml(file.agentName)}</span>
           <span>${timeAgo}</span>
           <span>${size}</span>
         </div>
@@ -1363,6 +1369,7 @@ function showReaderContent(title, markdown) {
 let readerFilePath = null;
 let readerEditing = false;
 let readerOriginalContent = '';
+let readerInputListenerAttached = false;
 
 async function openMarkdownFile(filePath) {
   const result = await api.readFile(filePath);
@@ -1394,8 +1401,11 @@ function enterReaderEdit() {
     proseEl.focus();
   }
 
-  // Track changes
-  contentEl.addEventListener('input', onReaderContentChange);
+  // Track changes (only attach once)
+  if (!readerInputListenerAttached) {
+    contentEl.addEventListener('input', onReaderContentChange);
+    readerInputListenerAttached = true;
+  }
 
   // Swap toolbar buttons
   document.getElementById('btn-reader-edit').style.display = 'none';
@@ -1436,6 +1446,7 @@ function cancelReaderEdit() {
 
   const contentEl = document.getElementById('reader-content');
   contentEl.removeEventListener('input', onReaderContentChange);
+  readerInputListenerAttached = false;
   contentEl.classList.remove('editing');
 
   // Re-render original content (discard edits)
@@ -1455,6 +1466,7 @@ function cancelReaderEdit() {
 function closeReader() {
   const contentEl = document.getElementById('reader-content');
   contentEl.removeEventListener('input', onReaderContentChange);
+  readerInputListenerAttached = false;
   contentEl.classList.remove('editing');
 
   readerOpen = false;
@@ -1774,14 +1786,28 @@ function setupEventListeners() {
 
   // Global keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    // Escape closes overlays in priority order
+    // Escape closes overlays/panels in priority order
     if (e.key === 'Escape') {
+      // Modals and overlays first (highest z-index)
+      if (!document.getElementById('add-agent-modal').classList.contains('hidden')) { closeAddAgentModal(); return; }
+      if (!document.getElementById('confirm-modal').classList.contains('hidden')) { closeConfirm(false); return; }
+      if (!document.getElementById('bug-modal').classList.contains('hidden')) { closeBugModal(); return; }
       if (!document.getElementById('workspace-dropdown').classList.contains('hidden')) { document.getElementById('workspace-dropdown').classList.add('hidden'); return; }
       if (!document.getElementById('workspace-modal').classList.contains('hidden')) { closeWorkspaceModal(); return; }
       if (!document.getElementById('workspace-context-menu').classList.contains('hidden')) { document.getElementById('workspace-context-menu').classList.add('hidden'); return; }
       if (commandPaletteOpen) { closeCommandPalette(); return; }
       if (terminalSearchOpen) { closeTerminalSearch(); return; }
       if (readerOpen) { closeReader(); return; }
+      // Side panels
+      const panelIds = ['configure-panel', 'help-panel', 'notepad-panel', 'todos-panel', 'inbox-panel', 'logs-panel', 'files-panel', 'crons-panel'];
+      for (const id of panelIds) {
+        const panel = document.getElementById(id);
+        if (panel && !panel.classList.contains('hidden')) {
+          panel.classList.add('hidden');
+          if (activeAgentId) terminals.get(activeAgentId)?.focus();
+          return;
+        }
+      }
     }
 
     if (e.metaKey || e.ctrlKey) {
@@ -2010,6 +2036,19 @@ async function startAgent(agentId, opts = {}) {
   }
 }
 
+function waitForAgentReady(agentId, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    if (agentStates.get(agentId) === 'running') { resolve(); return; }
+    const start = Date.now();
+    const check = setInterval(() => {
+      if (agentStates.get(agentId) === 'running' || Date.now() - start > timeoutMs) {
+        clearInterval(check);
+        resolve();
+      }
+    }, 100);
+  });
+}
+
 async function resumeAgent(agentId) {
   return startAgent(agentId, { resume: true });
 }
@@ -2022,7 +2061,7 @@ async function restartAgent() {
 async function stopAgent() {
   if (!activeAgentId) return;
   await api.kill(activeAgentId);
-  setAgentState(activeAgentId, 'stopped');
+  // State is set by the onExit handler when the PTY actually exits
 }
 
 let clearArmed = false;
@@ -2074,7 +2113,7 @@ async function showLogsList() {
   const titleEl = document.getElementById('logs-title');
 
   viewerEl.classList.add('hidden');
-  listEl.style.display = 'block';
+  listEl.classList.remove('hidden');
   backBtn.classList.add('hidden');
   titleEl.textContent = 'Session History';
   listEl.innerHTML = '';
@@ -2124,7 +2163,7 @@ async function viewLog(log) {
   const contentEl = document.getElementById('log-content');
   contentEl.innerHTML = marked.parse(currentLogMarkdown);
 
-  listEl.style.display = 'none';
+  listEl.classList.add('hidden');
   viewerEl.classList.remove('hidden');
   backBtn.classList.remove('hidden');
 
@@ -2149,21 +2188,18 @@ async function copyLogContent() {
   }
 }
 
-function sendLogToAgent() {
+async function sendLogToAgent() {
   if (!currentLogMarkdown || !activeAgentId) return;
 
   const prefix = 'Here is a previous session transcript for reference:\n\n---\n\n';
   const text = prefix + currentLogMarkdown;
   const bracketedText = `\x1b[200~${text}\x1b[201~\r`;
 
-  const running = agentStates.get(activeAgentId) === 'running';
-  if (!running) {
-    startAgent(activeAgentId).then(() => {
-      setTimeout(() => api.write(activeAgentId, bracketedText), 800);
-    });
-  } else {
-    api.write(activeAgentId, bracketedText);
+  if (agentStates.get(activeAgentId) !== 'running') {
+    await startAgent(activeAgentId);
+    await waitForAgentReady(activeAgentId);
   }
+  api.write(activeAgentId, bracketedText);
 
   // Close logs panel and focus terminal
   document.getElementById('logs-panel').classList.add('hidden');
@@ -2434,6 +2470,11 @@ function switchCronsTab(tab) {
 let confirmResolve = null;
 
 function showConfirm(title, message, okLabel = 'Remove') {
+  // Resolve any pending confirm as cancelled before showing a new one
+  if (confirmResolve) {
+    confirmResolve(false);
+    confirmResolve = null;
+  }
   return new Promise((resolve) => {
     confirmResolve = resolve;
     document.getElementById('confirm-modal-title').textContent = title;
@@ -2494,6 +2535,10 @@ async function removeAgent(agentId, skipConfirm = false) {
 }
 
 function createTerminalForAgent(agent) {
+  // Guard against duplicate wrappers
+  const existingWrapper = document.getElementById(`terminal-${agent.id}`);
+  if (existingWrapper) return;
+
   const container = document.getElementById('terminal-container');
   const wrapper = document.createElement('div');
   wrapper.className = 'terminal-wrapper';
@@ -4035,10 +4080,10 @@ function editTodoInline(todoId) {
 function renderTodoItem(todo) {
   const agent = config.agents.find(a => a.id === todo.agentId);
   const agentBadge = agent
-    ? `<span class="todo-agent-badge" style="background:${agent.color}">${agent.shortName}</span>`
+    ? `<span class="todo-agent-badge" style="background:${sanitizeColor(agent.color)}">${escapeHtml(agent.shortName)}</span>`
     : '';
   const summaryHtml = todo.summary
-    ? `<div class="todo-summary">${truncate(todo.summary, 60)}</div>`
+    ? `<div class="todo-summary">${escapeHtml(truncate(todo.summary, 60))}</div>`
     : '';
   const checked = todo.status === 'done' ? 'checked' : '';
   const doneClass = todo.status === 'done' ? ' todo-done' : '';
@@ -4050,7 +4095,7 @@ function renderTodoItem(todo) {
         <span class="todo-checkmark"></span>
       </label>
       <div class="todo-content">
-        <div class="todo-text">${todo.text}</div>
+        <div class="todo-text">${escapeHtml(todo.text)}</div>
         ${summaryHtml}
         <div class="todo-meta">
           ${agentBadge}
@@ -4088,8 +4133,8 @@ function renderTodosList() {
     const section = document.createElement('div');
     section.className = 'todo-goal-group';
     section.innerHTML = `
-      <div class="todo-goal-header" style="border-left-color:${goal.color || 'var(--accent)'}">
-        <span class="todo-goal-title">${goal.title}</span>
+      <div class="todo-goal-header" style="border-left-color:${sanitizeColor(goal.color) || 'var(--accent)'}">
+        <span class="todo-goal-title">${escapeHtml(goal.title)}</span>
         <span class="todo-goal-count">${todos.length}</span>
       </div>
       <div class="todo-goal-items">${todos.map(renderTodoItem).join('')}</div>
@@ -4209,12 +4254,12 @@ function renderGoalsList() {
     const item = document.createElement('div');
     item.className = 'goal-item';
     item.innerHTML = `
-      <div class="goal-color-dot" style="background:${goal.color}"></div>
+      <div class="goal-color-dot" style="background:${sanitizeColor(goal.color)}"></div>
       <div class="goal-info">
-        <div class="goal-title">${goal.title}</div>
+        <div class="goal-title">${escapeHtml(goal.title)}</div>
         <div class="goal-count">${count} todo${count !== 1 ? 's' : ''}</div>
       </div>
-      <button class="goal-delete" data-goal-id="${goal.id}" title="Delete">&times;</button>
+      <button class="goal-delete" data-goal-id="${escapeHtml(goal.id)}" title="Delete">&times;</button>
     `;
     listEl.appendChild(item);
   }
@@ -4274,7 +4319,7 @@ function renderInboxList() {
       : '<svg viewBox="0 0 24 24" class="inbox-icon idle"><circle cx="12" cy="12" r="6" fill="currentColor"/></svg>';
 
     const readClass = item.read ? ' inbox-read' : '';
-    const summaryHtml = item.summary ? `<div class="inbox-summary">${truncate(item.summary, 80)}</div>` : '';
+    const summaryHtml = item.summary ? `<div class="inbox-summary">${escapeHtml(truncate(item.summary, 80))}</div>` : '';
 
     const el = document.createElement('div');
     el.className = `inbox-item${readClass}`;
@@ -4283,10 +4328,10 @@ function renderInboxList() {
       ${typeIcon}
       <div class="inbox-content">
         <div class="inbox-title">
-          <span class="inbox-agent-dot" style="background:${agentColor}"></span>
-          ${item.title}
+          <span class="inbox-agent-dot" style="background:${sanitizeColor(agentColor)}"></span>
+          ${escapeHtml(item.title || '')}
         </div>
-        <div class="inbox-detail">${item.detail}</div>
+        <div class="inbox-detail">${escapeHtml(item.detail || '')}</div>
         ${summaryHtml}
       </div>
       <div class="inbox-time">${formatTimeAgo(item.timestamp)}</div>
@@ -4361,7 +4406,7 @@ async function showLogsWithRuns() {
     const date = new Date(run.startedAt);
     const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const timeStr = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    const summaryHtml = run.summary ? `<div class="run-summary">${truncate(run.summary, 80)}</div>` : '';
+    const summaryHtml = run.summary ? `<div class="run-summary">${escapeHtml(truncate(run.summary, 80))}</div>` : '';
     const triggerLabel = run.trigger === 'resume' ? 'resumed' : run.trigger || 'manual';
 
     const card = document.createElement('div');
