@@ -710,23 +710,52 @@ function initTerminalForAgent(agent, wrapper) {
   }));
 
   // File path link provider - hover to underline, click to open (.md in Reader, others externally)
-  const FILE_PATH_RE = /(?:~\/|\.\/|\/)?(?:[\w@._-]+\/)+[\w@._-]+\.\w{1,10}/g;
+  // Matches paths with directories AND bare filenames with common extensions
+  const FILE_PATH_RE = /(?:~\/|\.\/|\/)?(?:[\w@._-]+\/)+[\w@._-]+\.\w{1,10}|(?:^|(?<=\s|`|'|"|:|\(|\[))\.?[\w@_-][\w@._-]*\.(?:md|txt|json|yaml|yml|toml|py|js|ts|jsx|tsx|css|html|sh|sql|csv|xml|env|cfg|conf|ini|log|rs|go|rb|java|c|cpp|h|hpp|swift|kt)\b/g;
   terminal.registerLinkProvider({
     provideLinks(y, callback) {
-      const line = terminal.buffer.active.getLine(y - 1);
-      if (!line) { callback(undefined); return; }
-      const text = line.translateToString(true);
+      const buf = terminal.buffer.active;
+      // Collect wrapped line segments to handle paths/files that span wrapped lines
+      const segments = []; // { lineY (1-based), text, offset (char offset in combined string) }
+      let startY = y;
+      // Walk up to find start of wrapped chain
+      while (startY > 1) {
+        const prev = buf.getLine(startY - 1);
+        if (!prev || !prev.isWrapped) break;
+        startY--;
+      }
+      // Walk down to collect all wrapped segments
+      let combined = '';
+      for (let ly = startY; ; ly++) {
+        const l = buf.getLine(ly - 1);
+        if (!l) break;
+        if (ly > startY && !l.isWrapped) break;
+        const t = l.translateToString(true);
+        segments.push({ lineY: ly, text: t, offset: combined.length });
+        combined += t;
+      }
+
       const links = [];
       let m;
       FILE_PATH_RE.lastIndex = 0;
-      while ((m = FILE_PATH_RE.exec(text)) !== null) {
+      while ((m = FILE_PATH_RE.exec(combined)) !== null) {
+        const matchStart = m.index;
+        const matchEnd = m.index + m[0].length;
         // Skip if it looks like a URL (matched by WebLinksAddon)
-        const before = text.slice(Math.max(0, m.index - 10), m.index);
+        const before = combined.slice(Math.max(0, matchStart - 10), matchStart);
         if (/https?:\/\/\S*$/.test(before)) continue;
+        // Map combined-string positions back to line/column
+        let startSeg = segments[0], endSeg = segments[0];
+        for (const seg of segments) {
+          if (matchStart >= seg.offset) startSeg = seg;
+          if (matchEnd > seg.offset) endSeg = seg;
+        }
+        const startX = matchStart - startSeg.offset + 1;
+        const endX = matchEnd - endSeg.offset;
         links.push({
           range: {
-            start: { x: m.index + 1, y },
-            end: { x: m.index + m[0].length, y },
+            start: { x: startX, y: startSeg.lineY },
+            end: { x: endX, y: endSeg.lineY },
           },
           text: m[0],
           activate: async (_event, linkText) => {
@@ -743,7 +772,9 @@ function initTerminalForAgent(agent, wrapper) {
           },
         });
       }
-      callback(links.length > 0 ? links : undefined);
+      // Only return links that touch the requested line y
+      const relevant = links.filter(l => l.range.start.y <= y && l.range.end.y >= y);
+      callback(relevant.length > 0 ? relevant : undefined);
     }
   });
 
