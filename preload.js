@@ -73,4 +73,5 @@ contextBridge.exposeInMainWorld('api', {
   onFocus: (cb) => ipcRenderer.on('agent:focus', (_, id, wsId) => cb(id, wsId)),
   onInbox: (cb) => ipcRenderer.on('inbox:new', (_, item) => cb(item)),
   onNotification: (cb) => ipcRenderer.on('agent:notification', (_, id, active) => cb(id, active)),
+  onMail: (cb) => ipcRenderer.on('agent:mail', (_, id, count) => cb(id, count)),
 });

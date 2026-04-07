@@ -1754,6 +1754,23 @@ function setupEventListeners() {
     }
   });
 
+  // Agent-to-agent mail pending - dedupe so we don't toast every 2s poll
+  const mailNotified = new Set();
+  api.onMail((agentId, count) => {
+    if (mailNotified.has(agentId)) return;
+    mailNotified.add(agentId);
+    // Clear after 30s so we re-notify if new mail arrives later
+    setTimeout(() => mailNotified.delete(agentId), 30000);
+
+    const agent = config.agents.find(a => a.id === agentId);
+    const name = agent ? agent.shortName : agentId;
+    showToast(`${name} has ${count} pending message${count > 1 ? 's' : ''}`);
+    if (agentId !== activeAgentId) {
+      hasUnread.set(agentId, true);
+      renderSidebar();
+    }
+  });
+
   // Terminal resize observer - handles window resize, panel open/close, sidebar toggle
   const termContainer = document.getElementById('terminal-container');
   const resizeObs = new ResizeObserver(() => {

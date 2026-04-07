@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jents - AI Agent Terminal for macOS</title>
-  <meta name="description" content="Jents wraps the real Claude Code CLI in a native macOS app with multi-agent tabs, smart notifications, a notepad for reusable prompts, and starter packs that scaffold a full agent team in 30 seconds.">
+  <meta name="description" content="Jents is a macOS app that runs Claude Code agents as a team. Real terminals, Slack-style workspaces, smart notifications, and keyboard shortcuts. Free and open source.">
   <meta property="og:title" content="Jents - AI Agent Terminal for macOS">
-  <meta property="og:description" content="One window. Five agents. Zero lost threads. Run Claude Code with desktop superpowers.">
+  <meta property="og:description" content="A macOS app that runs Claude Code agents as a team. Real terminals, workspaces, and keyboard shortcuts.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jents.co">
   <meta property="og:image" content="https://jents.co/og-image.png">
@@ -14,7 +14,7 @@
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Jents - AI Agent Terminal for macOS">
-  <meta name="twitter:description" content="One window. Five agents. Zero lost threads. Run Claude Code with desktop superpowers.">
+  <meta name="twitter:description" content="A macOS app that runs Claude Code agents as a team. Real terminals, workspaces, and keyboard shortcuts.">
   <meta name="twitter:image" content="https://jents.co/og-image.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -62,6 +62,35 @@
       background-size: 32px 32px;
       pointer-events: none;
       z-index: 0;
+    }
+
+    /* Mouse-following glow */
+    .mouse-glow {
+      position: fixed;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,107,61,0.07) 0%, rgba(167,139,250,0.04) 30%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      transform: translate(-50%, -50%);
+      transition: left 0.3s ease-out, top 0.3s ease-out, opacity 0.4s ease;
+      opacity: 0;
+      will-change: left, top;
+    }
+    .mouse-glow.visible { opacity: 1; }
+
+    /* Film grain overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 256px 256px;
     }
 
     .page-wrap {
@@ -1482,6 +1511,7 @@
   </style>
 </head>
 <body>
+<div class="mouse-glow" id="mouse-glow"></div>
 <div class="page-wrap">
 
   <div class="glow-top"></div>
@@ -1527,8 +1557,8 @@
           Open Source & Free
         </a>
       </div>
-      <h1>Claude Code deserves<br><span>a real app.</span></h1>
-      <p class="hero-sub">Multi-agent tabs, smart notifications, a notepad for reusable prompts, and starter packs that scaffold a full team in 30 seconds.</p>
+      <h1>Run a team of agents<br><span>from your desktop.</span></h1>
+      <p class="hero-sub">Jents is a macOS app that runs Claude Code agents as a team. Real terminals, Slack-style workspaces, smart notifications, and keyboard shortcuts - so you can delegate and still shape every detail.</p>
       <div class="hero-actions">
         <a href="https://github.com/ngo-arch/jents/releases" class="btn-primary">
           <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -1544,37 +1574,53 @@
       <!-- Hero Mock Screenshot -->
       <div class="hero-screenshot">
         <div class="screenshot-placeholder">
-          <div class="mock-titlebar">
+          <!-- Traffic lights -->
+          <div class="mock-titlebar" style="z-index:4;width:44px;padding:0 0 0 14px">
             <div class="mock-traffic" style="background:#ff5f57"></div>
             <div class="mock-traffic" style="background:#febc2e"></div>
             <div class="mock-traffic" style="background:#28c840"></div>
           </div>
-          <div class="mock-sidebar">
-            <div class="mock-agent" id="agent-ops">
-              <div class="mock-avatar" style="background:#5b8def">OPS</div>
-              <span class="mock-name">Operations</span>
+          <!-- Workspace strip -->
+          <div style="position:absolute;left:0;top:0;bottom:0;width:44px;background:rgba(8,4,16,0.95);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:48px 0 12px;gap:8px;z-index:2">
+            <div style="width:28px;height:28px;border-radius:50%;background:#5b8def;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;position:relative">W<div style="position:absolute;left:-7px;top:50%;transform:translateY(-50%);width:3px;height:14px;background:white;border-radius:0 2px 2px 0"></div></div>
+            <div style="width:28px;height:28px;border-radius:50%;background:#a06bef;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;opacity:0.35">P</div>
+            <div style="width:28px;height:28px;border-radius:50%;background:#14b8a6;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;opacity:0.35">C</div>
+            <div style="margin-top:auto;width:22px;height:22px;border-radius:50%;border:1px dashed rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-dim);line-height:1">+</div>
+          </div>
+          <!-- Sidebar -->
+          <div class="mock-sidebar" style="left:44px;width:156px;padding:48px 8px 8px">
+            <div class="mock-agent" id="agent-ops" style="padding:6px 8px">
+              <div class="mock-avatar" style="background:#5b8def;width:24px;height:24px;font-size:7px">OPS</div>
+              <span class="mock-name" style="font-size:11px">Operations</span>
             </div>
-            <div class="mock-agent active" id="agent-fin">
-              <div class="mock-avatar" style="background:#ef6b6b">FIN</div>
-              <span class="mock-name">Finance</span>
+            <div class="mock-agent active" id="agent-fin" style="padding:6px 8px">
+              <div class="mock-avatar" style="background:#ef6b6b;width:24px;height:24px;font-size:7px">FIN</div>
+              <span class="mock-name" style="font-size:11px">Finance</span>
             </div>
-            <div class="mock-agent" id="agent-mkt">
-              <div class="mock-avatar" style="background:#6befa0">MKT</div>
-              <span class="mock-name">Marketing</span>
+            <div class="mock-agent" id="agent-mkt" style="padding:6px 8px;position:relative">
+              <div class="mock-avatar" style="background:#6befa0;width:24px;height:24px;font-size:7px">MKT</div>
+              <span class="mock-name" style="font-size:11px">Marketing</span>
+              <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);min-width:14px;height:14px;border-radius:7px;background:var(--accent);font-size:8px;font-weight:700;color:white;display:flex;align-items:center;justify-content:center;padding:0 3px">2</span>
             </div>
-            <div class="mock-agent" id="agent-pm">
-              <div class="mock-avatar" style="background:#a06bef">PM</div>
-              <span class="mock-name">Product</span>
+            <div class="mock-agent" id="agent-pm" style="padding:6px 8px">
+              <div class="mock-avatar" style="background:#a06bef;width:24px;height:24px;font-size:7px">PM</div>
+              <span class="mock-name" style="font-size:11px">Product</span>
             </div>
-            <div class="mock-agent" id="agent-eng">
-              <div class="mock-avatar" style="background:#f59e0b">ENG</div>
-              <span class="mock-name">Engineering</span>
+            <div class="mock-agent" id="agent-eng" style="padding:6px 8px">
+              <div class="mock-avatar" style="background:#f59e0b;width:24px;height:24px;font-size:7px">ENG</div>
+              <span class="mock-name" style="font-size:11px">Engineering</span>
             </div>
           </div>
+          <!-- Toolbar -->
           <div class="mock-toolbar">
             <span style="font-size:14px;font-weight:600;color:var(--text)" id="toolbar-name">Finance</span>
-            <div style="background:#34d399;width:6px;height:6px;border-radius:50%;margin-left:4px"></div>
+            <div style="background:#34d399;width:6px;height:6px;border-radius:50%;margin-left:6px;animation:pulse 2s ease infinite"></div>
             <span style="font-size:11px;color:var(--text-dim);flex:1;margin-left:4px">Running</span>
+            <div style="display:flex;gap:4px">
+              <div style="width:22px;height:22px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-dim)">&#9998;</div>
+              <div style="width:22px;height:22px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim)">&#9776;</div>
+              <div style="width:22px;height:22px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-dim)">&#128196;</div>
+            </div>
           </div>
           <div class="mock-terminal" id="hero-terminal">
             <div class="line" style="color:var(--text-dim)"><span style="color:#a78bfa">&#9614;&#9619;&#9608;&#9608;&#9608;&#9618;&#9612;</span>   <span style="font-weight:600;color:var(--text)">Claude Code</span> v2.1.85</div>
@@ -1610,12 +1656,8 @@
   <!-- ==================== TECH STACK BAR ==================== -->
   <section class="tech-bar">
     <div class="container">
-      <div class="tech-bar-inner">
-        <span class="tech-bar-label">Built on</span>
-        <span class="tech-bar-item"><span class="tech-dot" style="background:var(--purple)"></span> Claude Code CLI</span>
-        <span class="tech-bar-item"><span class="tech-dot" style="background:var(--blue)"></span> Electron</span>
-        <span class="tech-bar-item"><span class="tech-dot" style="background:var(--green)"></span> xterm.js</span>
-        <span class="tech-bar-item"><span class="tech-dot" style="background:var(--accent)"></span> node-pty</span>
+      <div class="tech-bar-inner" style="max-width:700px;margin:0 auto">
+        <span class="tech-bar-item" style="font-size:15px;color:var(--text-secondary);text-align:center;line-height:1.7">Each agent runs in its own real terminal. You type to them directly, switch between them instantly, and get notified the moment one needs you.</span>
       </div>
     </div>
   </section>
@@ -1626,7 +1668,7 @@
       <div class="section-label">Zero to Running</div>
       <h2 class="section-title">30 seconds to a full team</h2>
       <p class="starter-context">
-        No more wrestling with terminal tabs. Pick a starter pack and Jents scaffolds everything - CLAUDE.md instructions, run files, working directories - ready to start.
+        No server to deploy. No onboarding flow. Pick a starter pack and Jents scaffolds everything - CLAUDE.md instructions, run files, working directories - ready to start.
       </p>
 
       <div class="starter-grid fade-up">
@@ -1674,48 +1716,8 @@
       </div>
 
       <p class="templates-note">
-        Each agent is built from one of <strong>7 role templates</strong> - Data Analyst, Writer, Engineer, PM, Code Reviewer, QA Tester, DevOps - or start blank and build your own.
+        Each agent is built from one of <strong>8 role templates</strong> - Data Analyst, Writer, Engineer, PM, Code Reviewer, QA Tester, DevOps, Designer - or start blank, import from GitHub, and build your own.
       </p>
-    </div>
-  </section>
-
-  <!-- ==================== COMPARISON GRID ==================== -->
-  <section class="comparison-section">
-    <div class="container">
-      <div class="comparison-grid fade-up">
-        <div class="comparison-col">
-          <div class="comp-label cli">What you keep</div>
-          <h3>Full Claude Code CLI</h3>
-          <ul class="comp-list">
-            <li><span class="icon inherited">&#10003;</span> Your CLAUDE.md project instructions</li>
-            <li><span class="icon inherited">&#10003;</span> MCP servers and tools</li>
-            <li><span class="icon inherited">&#10003;</span> Permission modes (default, auto, YOLO)</li>
-            <li><span class="icon inherited">&#10003;</span> Hooks, settings, slash commands</li>
-            <li><span class="icon inherited">&#10003;</span> Channel plugins (iMessage, Telegram)</li>
-            <li><span class="icon inherited">&#10003;</span> --continue to resume sessions</li>
-            <li><span class="icon inherited">&#10003;</span> Full ANSI terminal with scrollback</li>
-          </ul>
-        </div>
-        <div class="comparison-divider">
-          <span class="plus">+</span>
-          <span class="line"></span>
-        </div>
-        <div class="comparison-col">
-          <div class="comp-label super">What Jents adds</div>
-          <h3>Desktop Superpowers</h3>
-          <ul class="comp-list">
-            <li><span class="icon added">&#9670;</span> Multi-agent tabs in a single window</li>
-            <li><span class="icon added">&#9670;</span> Starter packs and 7 agent templates</li>
-            <li><span class="icon added">&#9670;</span> Notepad for reusable prompts</li>
-            <li><span class="icon added">&#9670;</span> Reader view - markdown from terminal output</li>
-            <li><span class="icon added">&#9670;</span> Smart idle notifications per agent</li>
-            <li><span class="icon added">&#9670;</span> Auto-saved session transcripts</li>
-            <li><span class="icon added">&#9670;</span> Cross-agent file manager</li>
-            <li><span class="icon added">&#9670;</span> Built-in integration library</li>
-            <li><span class="icon added">&#9670;</span> Unified configure panel</li>
-          </ul>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -1723,41 +1725,48 @@
   <section class="features-section" id="features">
     <div class="container">
       <div class="section-label">Features</div>
-      <h2 class="section-title">Run. Build. Work.</h2>
-      <p class="section-sub" style="margin-bottom:80px">Everything the CLI does well, plus what it can't do from a single terminal window.</p>
+      <h2 class="section-title">What's inside</h2>
+      <p class="section-sub" style="margin-bottom:80px">Everything the CLI does well, plus what you can't get from a terminal window or a browser dashboard.</p>
 
       <!-- GROUP A: RUN -->
       <div class="feature-group fade-up">
         <div class="feature-group-text">
           <div class="feature-group-tag run">Run</div>
-          <h3>Five agents, one window, total visibility</h3>
-          <p>Every agent gets a color-coded sidebar slot with live status. When one finishes work in the background, you get a macOS notification. Click it and you're there.</p>
+          <h3>Workspaces, real terminals, total visibility</h3>
+          <p>Slack-style workspaces let you group agents by project, client, or domain - each with its own roster. Switch between them instantly. Every agent gets a real PTY terminal, desktop notifications, and an inbox that catches everything.</p>
           <ul class="feature-list">
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Color-coded sidebar with running/stopped/error status dots</li>
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Unread badges when background agents produce output</li>
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Smart notifications after 8s idle on substantial output</li>
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Permission mode selector per agent (Default / Auto / YOLO)</li>
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Resume last session with one click (--continue)</li>
-            <li><span class="icon" style="color:var(--green)">&#10003;</span> Double-click safety on stop and clear actions</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Workspaces with separate agent rosters - switch with Cmd+Shift+[/]</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Color-coded sidebar with live status, unread badges, and run summaries</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Inbox catches every agent exit and idle event - nothing gets lost</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Desktop notifications - click to jump to the agent, even cross-workspace</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Permission modes per agent (Default / Auto / Accept Edits / YOLO)</li>
+            <li><span class="icon" style="color:var(--green)">&#10003;</span> Run records track every session with duration, exit code, and auto-summary</li>
           </ul>
         </div>
         <div class="feature-visual">
           <div class="run-visual">
-            <div class="run-sidebar-mock">
+            <!-- Workspace strip -->
+            <div style="flex:0 0 36px;display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:6px;border-right:1px solid var(--border);background:rgba(8,4,16,0.5)">
+              <div style="width:24px;height:24px;border-radius:50%;background:#5b8def;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:white;position:relative">W<div style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:2px;height:10px;background:white;border-radius:0 1px 1px 0"></div></div>
+              <div style="width:24px;height:24px;border-radius:50%;background:#a06bef;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:white;opacity:0.3">P</div>
+              <div style="width:24px;height:24px;border-radius:50%;background:#14b8a6;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:white;opacity:0.3">C</div>
+            </div>
+            <!-- Sidebar -->
+            <div class="run-sidebar-mock" style="flex:0 0 120px">
               <div class="run-agent-row active">
                 <div class="run-agent-avatar" style="background:#5b8def">OPS</div>
                 <div class="run-agent-info"><div class="run-agent-name">Operations</div></div>
-                <div class="run-status-dot" style="background:#34d399"></div>
+                <div class="run-status-dot" style="background:#34d399;animation:pulse 2s ease infinite"></div>
               </div>
               <div class="run-agent-row">
                 <div class="run-agent-avatar" style="background:#ef6b6b">FIN</div>
                 <div class="run-agent-info"><div class="run-agent-name">Finance</div></div>
                 <div class="run-status-dot" style="background:#34d399"></div>
               </div>
-              <div class="run-agent-row">
+              <div class="run-agent-row" style="position:relative">
                 <div class="run-agent-avatar" style="background:#6befa0">MKT</div>
                 <div class="run-agent-info"><div class="run-agent-name">Marketing</div></div>
-                <div class="run-status-dot" style="background:var(--text-dim)"></div>
+                <div style="min-width:12px;height:12px;border-radius:6px;background:var(--accent);font-size:7px;font-weight:700;color:white;display:flex;align-items:center;justify-content:center;padding:0 2px;margin-left:auto">1</div>
               </div>
               <div class="run-agent-row">
                 <div class="run-agent-avatar" style="background:#a06bef">PM</div>
@@ -1767,19 +1776,24 @@
               <div class="run-agent-row">
                 <div class="run-agent-avatar" style="background:#f59e0b">ENG</div>
                 <div class="run-agent-info"><div class="run-agent-name">Engineering</div></div>
-                <div class="run-status-dot" style="background:#34d399"></div>
+                <div class="run-status-dot" style="background:var(--text-dim)"></div>
               </div>
             </div>
+            <!-- Inbox panel -->
             <div class="run-notifs">
-              <div class="run-notif">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <span style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent)">Inbox</span>
+                <span style="font-size:8px;color:var(--text-dim);background:rgba(255,107,61,0.1);padding:1px 5px;border-radius:4px;color:var(--accent)">3 new</span>
+              </div>
+              <div class="run-notif" style="border-left:2px solid #ef6b6b">
                 <div class="run-notif-icon" style="background:#ef6b6b">FIN</div>
                 <div>
                   <div class="run-notif-title">Finance - Ready for input</div>
-                  <div class="run-notif-body">P&L analysis complete. Cost spike flagged.</div>
+                  <div class="run-notif-body">Analysis complete. Cost spike flagged.</div>
                 </div>
                 <div class="run-notif-time">now</div>
               </div>
-              <div class="run-notif">
+              <div class="run-notif" style="border-left:2px solid #6befa0">
                 <div class="run-notif-icon" style="background:#6befa0">MKT</div>
                 <div>
                   <div class="run-notif-title">Marketing - Exited (0)</div>
@@ -1787,11 +1801,11 @@
                 </div>
                 <div class="run-notif-time">2m</div>
               </div>
-              <div class="run-notif">
+              <div class="run-notif" style="border-left:2px solid #5b8def">
                 <div class="run-notif-icon" style="background:#5b8def">OPS</div>
                 <div>
                   <div class="run-notif-title">Ops - Ready for input</div>
-                  <div class="run-notif-body">Morning brief drafted. 4 decisions.</div>
+                  <div class="run-notif-body">Morning brief drafted. 3 action items.</div>
                 </div>
                 <div class="run-notif-time">14m</div>
               </div>
@@ -1805,19 +1819,22 @@
         <div class="feature-group-text">
           <div class="feature-group-tag build">Build</div>
           <h3>From zero to running agent in 30 seconds</h3>
-          <p>Pick a template, name your agent, and go. Jents creates the directory, scaffolds CLAUDE.md with real guidelines, and drops it into your sidebar. Connect integrations with labeled form fields - no JSON required.</p>
+          <p>Pick a template, name your agent, and go. Jents creates the directory, scaffolds CLAUDE.md with real guidelines, and drops it into your sidebar. Connect MCP integrations and channel plugins with labeled form fields - no JSON editing.</p>
           <ul class="feature-list">
             <li><span class="icon" style="color:var(--accent)">&#9670;</span> 7 role templates with CLAUDE.md and run files auto-generated</li>
             <li><span class="icon" style="color:var(--accent)">&#9670;</span> 4 starter packs for instant multi-agent teams</li>
-            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Unified configure panel (agent + integrations + channels)</li>
-            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Integration library: Slack, GitHub, PostgreSQL, Google Workspace</li>
-            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Built-in guide: "How to build agents" with best practices</li>
+            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Import agents from GitHub - paste a URL and it clones + scaffolds</li>
+            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Integration library: Slack, GitHub, PostgreSQL, Google Workspace, and more</li>
+            <li><span class="icon" style="color:var(--accent)">&#9670;</span> Channel plugins: iMessage, Telegram - toggle on per agent</li>
             <li><span class="icon" style="color:var(--accent)">&#9670;</span> Clone agents with "New Instance" for parallel runs</li>
           </ul>
         </div>
         <div class="feature-visual">
           <div class="build-visual">
-            <div class="build-header">Start from a template</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+              <div class="build-header">Start from a template</div>
+              <div style="font-size:9px;color:var(--accent);font-weight:500;display:flex;align-items:center;gap:3px"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style="opacity:0.7"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> Import from GitHub</div>
+            </div>
             <div class="build-templates">
               <div class="build-tmpl"><div class="build-tmpl-name">Data Analyst</div><div class="build-tmpl-desc">Query, report, surface insights</div></div>
               <div class="build-tmpl"><div class="build-tmpl-name">Writer</div><div class="build-tmpl-desc">Draft, edit, maintain voice</div></div>
@@ -1835,8 +1852,29 @@
                 <span class="build-form-label">Dir</span>
                 <span class="build-form-value">~/agents/engineer</span>
               </div>
-              <div class="build-form-row" style="font-size:9px;color:var(--text-dim)">
-                Creates CLAUDE.md + run-task.md from template
+              <div class="build-form-row">
+                <span class="build-form-label">Color</span>
+                <div style="display:flex;gap:4px;align-items:center">
+                  <div style="width:14px;height:14px;border-radius:50%;background:#5b8def"></div>
+                  <div style="width:14px;height:14px;border-radius:50%;background:#6befa0"></div>
+                  <div style="width:14px;height:14px;border-radius:50%;background:#ef6b6b;box-shadow:0 0 0 2px var(--bg-card),0 0 0 3px rgba(255,255,255,0.5)"></div>
+                  <div style="width:14px;height:14px;border-radius:50%;background:#a06bef"></div>
+                  <div style="width:14px;height:14px;border-radius:50%;background:#f59e0b"></div>
+                  <div style="width:14px;height:14px;border-radius:50%;background:#14b8a6"></div>
+                </div>
+              </div>
+              <div class="build-form-row">
+                <span class="build-form-label" style="width:55px">Channels</span>
+                <div style="display:flex;gap:10px;align-items:center">
+                  <div style="display:flex;align-items:center;gap:3px">
+                    <div style="width:22px;height:12px;border-radius:6px;background:var(--accent);position:relative"><div style="width:8px;height:8px;border-radius:50%;background:white;position:absolute;right:2px;top:2px"></div></div>
+                    <span style="font-size:9px;color:var(--text-secondary)">iMessage</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:3px">
+                    <div style="width:22px;height:12px;border-radius:6px;background:rgba(255,255,255,0.12);position:relative"><div style="width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.35);position:absolute;left:2px;top:2px"></div></div>
+                    <span style="font-size:9px;color:var(--text-dim)">Telegram</span>
+                  </div>
+                </div>
               </div>
               <div class="build-form-btn">Add Agent</div>
             </div>
@@ -1849,49 +1887,129 @@
         <div class="feature-group-text">
           <div class="feature-group-tag work" style="color:var(--purple)">Work</div>
           <h3>The tools the terminal never had</h3>
-          <p>Save prompts you reuse. Read clean markdown instead of ANSI noise. See what files your agents touched. Drag files into the terminal. Every session auto-saved.</p>
+          <p>Command Palette to find anything. Todos to track what matters. Notepad to save prompts you reuse. Reader View to read clean markdown instead of ANSI noise. Scheduled tasks to automate recurring agent runs.</p>
           <ul class="feature-list">
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Command Palette (Cmd+K): spotlight-style search across every action</li>
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Todos: goals and tasks assignable to agents, grouped and trackable</li>
             <li><span class="icon" style="color:var(--purple)">&#9670;</span> Notepad: save, edit, and send reusable prompts to any agent</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Reader View: strip ANSI, render markdown, one-click copy</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Copy Last Response: extract the last answer with one click</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> File Manager: recent files across all agent directories</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Session History: auto-saved transcripts, last 20 per agent</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Drag-and-drop file paths into terminal or notepad</li>
-            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Clickable URLs in terminal output</li>
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Reader View: strip ANSI, render markdown, edit and save .md files</li>
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Scheduled Tasks: manage launchd crons, toggle on/off, view run history</li>
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> File Manager: recent files across all agent directories, click to open</li>
+            <li><span class="icon" style="color:var(--purple)">&#9670;</span> Session History: auto-saved transcripts with markdown rendering</li>
           </ul>
         </div>
         <div class="feature-visual">
           <div class="work-visual">
+            <!-- Left: Todos + Notepad -->
             <div class="work-notepad">
-              <div class="work-notepad-label">Notepad</div>
-              <div class="work-note">Review the last 3 days of team messages. Pull out decisions, action items, and open questions. Format as bullet points grouped by topic.</div>
-              <div class="work-note-actions">
-                <div class="work-note-btn send">Send</div>
-                <div class="work-note-btn">Edit</div>
-                <div class="work-note-btn">Del</div>
+              <div class="work-notepad-label" style="color:var(--purple)">Todos</div>
+              <!-- Goal group -->
+              <div style="margin-bottom:8px">
+                <div style="font-size:9px;color:var(--text-dim);font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:4px"><span style="font-size:7px">&#9660;</span> Q2 Launch</div>
+                <div style="display:flex;flex-direction:column;gap:3px;padding-left:4px">
+                  <div style="display:flex;align-items:center;gap:5px;font-size:9px">
+                    <span style="width:12px;height:12px;border-radius:3px;background:rgba(52,211,153,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:7px;color:var(--green)">&#10003;</span>
+                    <span style="text-decoration:line-through;color:var(--text-dim)">Finalize pricing page</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text-secondary)">
+                    <span style="width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,0.15);flex-shrink:0"></span>
+                    Run competitive analysis
+                    <span style="font-size:7px;padding:1px 4px;border-radius:3px;background:rgba(91,141,239,0.15);color:#5b8def;margin-left:auto;flex-shrink:0">MKT</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:5px;font-size:9px;color:var(--text-secondary)">
+                    <span style="width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,0.15);flex-shrink:0"></span>
+                    Draft launch sequence
+                    <span style="font-size:7px;padding:1px 4px;border-radius:3px;background:rgba(239,107,107,0.15);color:#ef6b6b;margin-left:auto;flex-shrink:0">FIN</span>
+                  </div>
+                </div>
               </div>
-              <div style="margin-top:12px">
-                <div class="work-note" style="font-size:9px;opacity:0.7">Analyze ad spend by channel for the last 90 days. Flag any channel where CPA increased more than 20%.</div>
+              <!-- Notepad -->
+              <div style="border-top:1px solid var(--border);padding-top:8px">
+                <div class="work-notepad-label">Notepad</div>
+                <div class="work-note" style="font-size:9px;line-height:1.5">Review the last 3 days of team messages. Pull out decisions and action items.</div>
                 <div class="work-note-actions">
                   <div class="work-note-btn send">Send</div>
                   <div class="work-note-btn">Edit</div>
-                  <div class="work-note-btn">Del</div>
                 </div>
               </div>
             </div>
-            <div class="work-reader">
-              <div class="work-reader-label">Reader View</div>
-              <div class="work-reader-content">
-                <h4>Weekly Revenue Analysis</h4>
-                <p style="font-size:11px;margin-bottom:8px">Revenue is up <strong style="color:var(--text)">14% MoM</strong> driven by new subscription growth in the Southeast region.</p>
-                <p style="font-size:11px;margin-bottom:8px">However, vendor costs spiked <code>31%</code> due to two new contracts signed Tuesday.</p>
-                <p style="font-size:11px"><strong style="color:var(--text)">Recommendation:</strong> Flag to finance lead before Thursday board prep.</p>
+            <!-- Right: Command Palette + Reader -->
+            <div class="work-reader" style="position:relative">
+              <!-- Command palette floating overlay -->
+              <div style="position:absolute;top:8px;left:8px;right:8px;padding:8px;background:rgba(18,14,28,0.97);border:1px solid rgba(255,255,255,0.12);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.6);z-index:2">
+                <div style="display:flex;align-items:center;gap:5px;padding:4px 6px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:5px;margin-bottom:5px">
+                  <span style="font-size:9px;color:var(--text-dim)">&#128269;</span>
+                  <span style="font-size:10px;color:var(--text)">reader</span>
+                  <span style="font-size:7px;color:var(--text-dim);margin-left:auto;border:1px solid var(--border);border-radius:2px;padding:1px 3px">esc</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:1px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px;border-radius:4px;background:rgba(255,107,61,0.08)">
+                    <span style="font-size:9px;color:var(--text)">Toggle Reader View</span>
+                    <span style="font-size:7px;color:var(--text-dim)">&#8984;D</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px;border-radius:4px">
+                    <span style="font-size:9px;color:var(--text-secondary)">Copy Reader Content</span>
+                    <span style="font-size:7px;color:var(--text-dim)">&#8984;C</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Reader content behind palette -->
+              <div style="padding-top:84px">
+                <div class="work-reader-label">Reader View</div>
+                <div class="work-reader-content">
+                  <h4>Weekly Analysis</h4>
+                  <p style="font-size:10px;margin-bottom:6px">Revenue is up <strong style="color:var(--text)">14% MoM</strong> driven by subscription growth.</p>
+                  <p style="font-size:10px;margin-bottom:4px"><strong style="color:var(--text)">Key findings:</strong></p>
+                  <div style="font-size:9px;color:var(--text-secondary);padding-left:10px;margin-bottom:6px;line-height:1.6">
+                    &#8226; Southeast region strongest<br>
+                    &#8226; Vendor costs spiked <code>31%</code><br>
+                    &#8226; Two new contracts signed Tue
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
+    </div>
+  </section>
+
+  <!-- ==================== COMPARISON GRID ==================== -->
+  <section class="comparison-section">
+    <div class="container">
+      <div class="section-label">Why Not a Dashboard?</div>
+      <h2 class="section-title">Two ways to run agents</h2>
+      <p class="section-sub" style="margin-bottom:48px">Orchestration platforms manage agents through a browser. Jents keeps you close enough to shape the work.</p>
+
+      <div class="comparison-grid fade-up">
+        <div class="comparison-col">
+          <div class="comp-label" style="color:var(--text-dim)">Orchestration Platforms</div>
+          <h3>Manage from afar</h3>
+          <ul class="comp-list">
+            <li><span class="icon" style="color:var(--text-dim)">&#9670;</span> Browser dashboard you check periodically</li>
+            <li><span class="icon" style="color:var(--text-dim)">&#9670;</span> Ticket queues and threaded conversations</li>
+            <li><span class="icon" style="color:var(--text-dim)">&#9670;</span> Org charts, hierarchies, governance gates</li>
+            <li><span class="icon" style="color:var(--text-dim)">&#9670;</span> Agent-agnostic (lowest common denominator)</li>
+            <li><span class="icon" style="color:var(--text-dim)">&#9670;</span> Server setup, Docker, config files</li>
+          </ul>
+        </div>
+        <div class="comparison-divider">
+          <span class="plus" style="font-size:16px">vs</span>
+          <span class="line"></span>
+        </div>
+        <div class="comparison-col">
+          <div class="comp-label super">Jents</div>
+          <h3>Stay close to the work</h3>
+          <ul class="comp-list">
+            <li><span class="icon added">&#9670;</span> Native macOS app - always open, always ready</li>
+            <li><span class="icon added">&#9670;</span> Real terminals - type directly to each agent</li>
+            <li><span class="icon added">&#9670;</span> Workspaces, not org charts - group and switch fast</li>
+            <li><span class="icon added">&#9670;</span> Built for Claude Code - the best agent CLI</li>
+            <li><span class="icon added">&#9670;</span> Download and run - no server, no config</li>
+          </ul>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -1906,7 +2024,7 @@
         <div class="step">
           <div class="step-number">1</div>
           <h4>Download Jents</h4>
-          <p>Install the macOS app. Electron with native PTY support - no Docker, no VMs, no config files.</p>
+          <p>Install the macOS app. Native PTY terminals - no Docker, no servers, no config files, no browser tabs.</p>
         </div>
         <div class="step">
           <div class="step-number">2</div>
@@ -1916,7 +2034,7 @@
         <div class="step">
           <div class="step-number">3</div>
           <h4>Start with Cmd+R</h4>
-          <p>Your agents appear in the sidebar. Start them, and Jents handles notifications, session logs, and file tracking from there.</p>
+          <p>Your agents appear in the sidebar. Start them, switch between workspaces, and Jents handles notifications, session logs, inbox, and file tracking.</p>
         </div>
       </div>
     </div>
@@ -1926,28 +2044,28 @@
   <section class="who" id="who">
     <div class="container">
       <div class="section-label">Who It's For</div>
-      <h2 class="section-title">Your agents deserve an org chart</h2>
+      <h2 class="section-title">Built for the human at the keyboard</h2>
 
       <div class="personas fade-up">
         <div class="persona-card">
           <div class="persona-icon" style="background:rgba(91,141,239,0.15)">&#127919;</div>
-          <h4>Solo Founder</h4>
-          <p>You're one person running a company with 5 Claude agents. Ops, Finance, Marketing, Product, Engineering. You need all of them visible and notified the moment one needs input.</p>
+          <h4>Solo Operator</h4>
+          <p>You're one person running a company with 5 Claude agents. You want every agent visible, keyboard-accessible, and notifying you the moment it needs input - from a native app, not a browser tab.</p>
         </div>
         <div class="persona-card">
           <div class="persona-icon" style="background:rgba(167,139,250,0.15)">&#9881;</div>
-          <h4>Technical Operator</h4>
-          <p>You've already written CLAUDE.md files, connected MCP servers, and set permission modes. You just need a real app to manage the agents instead of 4 terminal tabs.</p>
+          <h4>Power User</h4>
+          <p>You've written CLAUDE.md files, connected MCP servers, set up channel plugins. You just need a real app instead of 6 terminal tabs - one that keeps you in the conversation, not watching from a dashboard.</p>
         </div>
         <div class="persona-card">
           <div class="persona-icon" style="background:rgba(52,211,153,0.15)">&#128101;</div>
-          <h4>Team Lead</h4>
-          <p>You're building Claude Code workflows for your team. Jents gives each workflow a named container with its own config, logs, integrations, and notification stream.</p>
+          <h4>Team Builder</h4>
+          <p>You're building Claude Code workflows across projects. Workspaces give each domain its own agent roster, configs, logs, and notification stream - no server required.</p>
         </div>
       </div>
 
       <blockquote class="manifesto-quote">
-        <p>"Job titles are containers for work - sufficiently narrow to be focused, sufficiently broad to be useful. That's what makes them perfect containers for AI agents."</p>
+        <p>"Job titles are containers for work - sufficiently narrow to be focused, sufficiently broad to be useful. That's what makes them perfect containers for AI agents. The question is how you interact with them."</p>
       </blockquote>
 
       <div class="manifesto-expand">
@@ -1955,10 +2073,11 @@
         <div class="manifesto-full" id="manifesto">
           <p>The business world has spent centuries evolving containers for work. CFO. CMO. Chief of Staff. Product Manager. These titles aren't arbitrary. Each one is <strong>sufficiently narrow in objectives</strong> to be focused, and <strong>sufficiently broad in capabilities</strong> to be useful.</p>
           <p>That's what makes them perfect containers for AI agents. And Jents is built for the person who's figured that out.</p>
-          <p><strong>You're a founder, operator, or team lead</strong> who's already using Claude Code. You've written CLAUDE.md files that define each agent's mandate. You've connected MCP servers so they can query your data, read your messages, update your tools. You've set permission modes so some agents run autonomously while others wait for approval. The agents work. The problem is managing them.</p>
-          <p>You've got four terminal tabs open and you keep losing track of which one is doing what. An agent finishes a 10-minute task in the background and you don't notice for an hour. You want to paste a complex prompt but the terminal mangles it line by line. The output is beautiful markdown buried under ANSI codes and spinner characters.</p>
-          <p><strong>Jents fixes all of that.</strong> Your agents live in a sidebar with colored avatars and status dots. Desktop notifications tell you the moment an agent finishes. The notepad lets you save prompts and fire them at any agent with one click. Reader view strips the noise and renders clean formatted output you can copy into a doc. Every session is auto-saved so you can review what any agent did last Tuesday.</p>
-          <p>It's like a <strong>beautiful orchestra</strong> once everything's in motion. And it dramatically expands the surface area of what any one person can do when it's customized for your business and your life.</p>
+          <p><strong>You're a founder, operator, or builder</strong> who's already using Claude Code. You've written CLAUDE.md files that define each agent's mandate. You've connected MCP servers so they can query your data, read your messages, update your tools. You've set permission modes so some agents run autonomously while others wait for approval. The agents work. The problem is managing them from a terminal.</p>
+          <p>You've got six tabs open and you keep losing track of which one is doing what. An agent finishes a 10-minute task in the background and you don't notice for an hour. You want to paste a complex prompt but the terminal mangles it. The output is beautiful markdown buried under ANSI noise.</p>
+          <p>Some tools solve this by putting a dashboard between you and the work - tickets, governance, approval workflows. That works if you want to fully outsource the thinking. But if you want to delegate and still stay close enough to shape every detail - reading output, refining prompts, catching what an agent missed - you need something different.</p>
+          <p><strong>Jents is that something.</strong> A native macOS app that's always open, always ready, always one shortcut away from every agent you run. Workspaces group your agents by project. Notifications catch every moment an agent needs you. The notepad holds prompts you reuse. Reader View strips the noise. Every session is auto-saved.</p>
+          <p>The result isn't a simulated company. It's a <strong>dramatically more capable human.</strong> And it's like a beautiful orchestra once everything's in motion.</p>
           <p class="sig">- The Jents Team</p>
         </div>
       </div>
@@ -1973,8 +2092,16 @@
 
       <div class="shortcuts-grid fade-up">
         <div class="shortcut-item">
+          <span class="shortcut-label">Command palette</span>
+          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>K</kbd></div>
+        </div>
+        <div class="shortcut-item">
           <span class="shortcut-label">Switch agent tabs</span>
           <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>1-9</kbd></div>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">Cycle workspaces</span>
+          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>&#8679;</kbd><kbd>[/]</kbd></div>
         </div>
         <div class="shortcut-item">
           <span class="shortcut-label">Start / restart agent</span>
@@ -1989,16 +2116,20 @@
           <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>D</kbd></div>
         </div>
         <div class="shortcut-item">
-          <span class="shortcut-label">Toggle file manager</span>
-          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>F</kbd></div>
+          <span class="shortcut-label">Toggle todos</span>
+          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>T</kbd></div>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">Toggle inbox</span>
+          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>I</kbd></div>
+        </div>
+        <div class="shortcut-item">
+          <span class="shortcut-label">File manager</span>
+          <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>&#8679;</kbd><kbd>F</kbd></div>
         </div>
         <div class="shortcut-item">
           <span class="shortcut-label">Toggle sidebar</span>
           <div class="shortcut-keys"><kbd>&#8984;</kbd><kbd>B</kbd></div>
-        </div>
-        <div class="shortcut-item">
-          <span class="shortcut-label">Close active overlay</span>
-          <div class="shortcut-keys"><kbd>Esc</kbd></div>
         </div>
       </div>
     </div>
@@ -2012,24 +2143,32 @@
 
       <div class="faq-grid fade-up">
         <details class="faq-item" open>
+          <summary>How is this different from Paperclip?</summary>
+          <p>Different interaction model. Paperclip is a server-side orchestration platform - you manage agents through a browser dashboard with tickets and governance. Jents is a native desktop app - you type directly into real terminals. Paperclip is agent-agnostic. Jents is built for Claude Code, the most capable agent CLI. Both help you run agent teams. Paperclip is great if you want to fully outsource the thinking. Jents is for when you want to delegate but still stay close enough to shape the work.</p>
+        </details>
+        <details class="faq-item">
           <summary>Is Jents free?</summary>
           <p>Yes. Jents is free and open source. The full source code is on <a href="https://github.com/ngo-arch/jents" target="_blank">GitHub</a>. You need your own Claude Code CLI subscription from Anthropic.</p>
         </details>
         <details class="faq-item">
           <summary>Does Jents replace Claude Code?</summary>
-          <p>No. Jents wraps the real Claude Code CLI. Every keystroke goes to a real PTY running the real binary. Your CLAUDE.md files, MCP servers, permission modes, and hooks all work exactly the same.</p>
+          <p>No. Jents wraps the real Claude Code CLI. Every keystroke goes to a real PTY running the real binary. Your CLAUDE.md files, MCP servers, permission modes, hooks, channels, and slash commands all work exactly the same.</p>
         </details>
         <details class="faq-item">
           <summary>What do I need to run it?</summary>
-          <p>macOS on Apple Silicon (M1/M2/M3/M4) and the Claude Code CLI installed. Jents spawns <code>claude</code> directly - if it works in your terminal, it works in Jents.</p>
+          <p>macOS on Apple Silicon (M1/M2/M3/M4) and the Claude Code CLI installed. Download, open, start. No server, no Docker, no config files. If <code>claude</code> works in your terminal, it works in Jents.</p>
         </details>
         <details class="faq-item">
           <summary>Can I use my existing agents?</summary>
-          <p>Yes. Point any agent's working directory at an existing folder with a CLAUDE.md. Jents doesn't touch your files - it just provides the UI layer on top.</p>
+          <p>Yes. Point any agent's working directory at an existing folder with a CLAUDE.md. Jents doesn't touch your files - it just provides the UI layer on top. You can also import agents from GitHub URLs.</p>
         </details>
         <details class="faq-item">
-          <summary>Does it work with MCP servers?</summary>
-          <p>Yes. Jents inherits your full shell environment, including MCP server configs. Any MCP server that works in your terminal works in Jents.</p>
+          <summary>What are workspaces?</summary>
+          <p>Think Slack workspaces. Each workspace has its own agent roster. Group agents by project, client, or domain and switch between them with Cmd+Shift+[/]. Agent sessions persist across workspace switches.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Does it work with MCP servers and channels?</summary>
+          <p>Yes. Jents includes an integration library with templates for Slack, GitHub, PostgreSQL, Google Workspace and more - add them with form fields, no JSON editing. Channel plugins (iMessage, Telegram) can be toggled on per agent.</p>
         </details>
         <details class="faq-item">
           <summary>Is there a Windows or Linux version?</summary>
@@ -2042,8 +2181,8 @@
   <!-- ==================== CTA ==================== -->
   <section class="cta" id="cta">
     <div class="container">
-      <h2>Run your agents like a team</h2>
-      <p>Download the alpha for macOS (Apple Silicon). Free and open to testers.</p>
+      <h2>Run your agents from a real desktop</h2>
+      <p>Download the alpha for macOS (Apple Silicon). Free, open source, no server required.</p>
       <a href="https://github.com/ngo-arch/jents/releases" class="cta-download">
         <svg width="20" height="20" fill="none" viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 13h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Download for macOS
@@ -2146,6 +2285,22 @@
           setTimeout(() => key.classList.remove('kbd-pressed'), i * 80 + 300);
         });
       });
+    });
+
+    // Mouse-following glow
+    const glow = document.getElementById('mouse-glow');
+    let glowVisible = false;
+    document.addEventListener('mousemove', (e) => {
+      glow.style.left = e.clientX + 'px';
+      glow.style.top = e.clientY + 'px';
+      if (!glowVisible) {
+        glow.classList.add('visible');
+        glowVisible = true;
+      }
+    });
+    document.addEventListener('mouseleave', () => {
+      glow.classList.remove('visible');
+      glowVisible = false;
     });
   </script>
 </body>

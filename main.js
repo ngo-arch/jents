@@ -48,6 +48,8 @@ const outputSinceIdle = new Map();
 const activeRuns = new Map(); // agentId -> { id, agentId, startedAt, trigger, logPath }
 
 const USER_DATA_DIR = path.join(os.homedir(), process.env.JENTS_DATA_DIR || 'agent-desk');
+const MAIL_DIR = path.join(USER_DATA_DIR, 'mail');
+const TASKS_DIR = path.join(USER_DATA_DIR, 'tasks');
 
 // --- Workspaces ---
 
@@ -110,6 +112,18 @@ function findAgentAcrossWorkspaces(agentId) {
     if (agent) return agent;
   }
   return null;
+}
+
+function getAllAgentsForComms() {
+  const agents = [];
+  const wConfig = getWorkspacesConfig();
+  for (const ws of wConfig.workspaces) {
+    const wsConfig = getConfig(ws.id);
+    for (const a of wsConfig.agents) {
+      agents.push({ id: a.id, name: a.name, shortName: a.shortName });
+    }
+  }
+  return agents;
 }
 
 function findWorkspaceForAgent(agentId) {
@@ -361,6 +375,97 @@ function resetIdleTimer(agentId, agent) {
   }, 8000));
 }
 
+// --- Agent-to-Agent Comms ---
+
+// Inject jents comms MCP server into agent's .mcp.json before spawn
+function ensureCommsMcp(agentId, cwd) {
+  const mcpPath = path.join(cwd, '.mcp.json');
+  let mcpConfig = {};
+  try {
+    mcpConfig = JSON.parse(fs.readFileSync(mcpPath, 'utf-8'));
+  } catch {}
+
+  if (!mcpConfig.mcpServers) mcpConfig.mcpServers = {};
+
+  const nodePath = resolveCommand('node');
+  const serverPath = path.join(__dirname, 'comms-server.js');
+
+  mcpConfig.mcpServers['jents'] = {
+    command: nodePath,
+    args: [serverPath],
+    env: {
+      JENTS_AGENT_ID: agentId,
+      JENTS_DATA_DIR: USER_DATA_DIR,
+    },
+  };
+
+  fs.writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2));
+}
+
+// Format a mail message for terminal injection
+function formatMailForTerminal(msg) {
+  if (msg.type === 'message') {
+    return `\n[JENTS MESSAGE from ${msg.fromName}]\n${msg.message}\n`;
+  } else if (msg.type === 'task') {
+    let text = `\n[JENTS TASK from ${msg.fromName} | ${msg.id}]\n${msg.task}`;
+    if (msg.context) text += `\nContext: ${msg.context}`;
+    text += `\n\nWhen complete, call the complete_task tool with task_id="${msg.id}" and your result.\n`;
+    return text;
+  } else if (msg.type === 'result') {
+    return `\n[JENTS RESULT from ${msg.fromName} | ${msg.taskId}]\nTask: ${msg.task}\nResult: ${msg.result}\n`;
+  }
+  return `\n[JENTS from ${msg.fromName || 'unknown'}]: ${JSON.stringify(msg)}\n`;
+}
+
+// Check for pending mail and notify renderer (delivery happens via check_messages MCP tool)
+function notifyPendingMail(agentId) {
+  const agentMailDir = path.join(MAIL_DIR, agentId);
+  if (!fs.existsSync(agentMailDir)) return 0;
+
+  const files = fs.readdirSync(agentMailDir).filter(f => f.endsWith('.json'));
+  if (files.length > 0) {
+    mainWindow?.webContents.send('agent:mail', agentId, files.length);
+  }
+  return files.length;
+}
+
+// Poll all mail directories: deliver to running agents, auto-start on tasks
+function pollMail() {
+  if (!fs.existsSync(MAIL_DIR)) return;
+
+  let dirs;
+  try { dirs = fs.readdirSync(MAIL_DIR, { withFileTypes: true }); } catch { return; }
+
+  for (const entry of dirs) {
+    if (!entry.isDirectory()) continue;
+    const agentId = entry.name;
+    const agentMailDir = path.join(MAIL_DIR, agentId);
+
+    const files = fs.readdirSync(agentMailDir).filter(f => f.endsWith('.json'));
+    if (files.length === 0) continue;
+
+    if (sessions.has(agentId)) {
+      // Agent running - notify renderer of pending mail
+      notifyPendingMail(agentId);
+    } else {
+      // Agent not running - auto-start if there's a delegated task
+      for (const file of files) {
+        try {
+          const msg = JSON.parse(fs.readFileSync(path.join(agentMailDir, file), 'utf-8'));
+          if (msg.type === 'task') {
+            const agent = findAgentAcrossWorkspaces(agentId);
+            if (agent) {
+              spawnAgent(agentId, { prompt: 'You have been started because another agent delegated a task to you. Call check_messages now to see your pending tasks.' });
+              mainWindow?.webContents.send('agent:focus', agentId, findWorkspaceForAgent(agentId));
+            }
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+}
+
 // --- PTY Management ---
 
 // Resolve a command name to its absolute path
@@ -402,6 +507,24 @@ function spawnAgent(agentId, opts = {}) {
   const cmdParts = agent.command.split(' ');
   const baseCmd = cmdParts[0];
   const args = cmdParts.slice(1);
+
+  // Inject comms MCP server + system prompt for claude-based agents
+  if (baseCmd === 'claude') {
+    try { ensureCommsMcp(agentId, cwd); } catch {}
+    const allAgents = getAllAgentsForComms();
+    const roster = allAgents.map(a => `  - ${a.name} (id: ${a.id})`).join('\n');
+    const commsPrompt = [
+      'You have agent-to-agent communication tools via the "jents" MCP server.',
+      `Your agent ID is "${agentId}".`,
+      'Available tools: list_agents, send_message, delegate_task, complete_task, check_messages.',
+      'IMPORTANT: call check_messages at the START of every conversation to see if other agents have sent you messages or tasks.',
+      'Use send_message for FYI/status updates. Use delegate_task when you need work done and want the result back.',
+      'If you receive a task via check_messages, complete it and call complete_task with the task_id and result.',
+      'Current agent roster:',
+      roster,
+    ].join('\n');
+    args.push('--append-system-prompt', commsPrompt);
+  }
   if (agent.channels && agent.channels.length > 0) {
     args.push('--channels', ...agent.channels);
   }
@@ -414,6 +537,11 @@ function spawnAgent(agentId, opts = {}) {
   // Resume last session
   if (opts.resume) {
     args.push('--continue');
+  }
+
+  // Initial prompt (used for auto-start on task delegation)
+  if (opts.prompt && baseCmd === 'claude') {
+    args.push('--prompt', opts.prompt);
   }
 
   // Resolve command to absolute path (safety net in case PATH capture failed)
@@ -1198,6 +1326,8 @@ app.whenReady().then(() => {
   app.setName('Jents');
   rotateOldLogs();
   createWindow();
+  // Poll for agent-to-agent mail every 2 seconds
+  setInterval(pollMail, 2000);
 });
 
 app.on('window-all-closed', () => {
