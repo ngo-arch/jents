@@ -301,7 +301,10 @@
     <!-- Files panel (slides in from right) -->
     <aside id="files-panel" class="hidden">
       <div id="files-header">
-        <h2>Recent Files</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <h2>Files</h2>
+          <select id="files-agent-filter"></select>
+        </div>
         <div style="display:flex;gap:2px">
           <button class="toolbar-btn" id="btn-files-finder" title="Open in Finder">
             <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>

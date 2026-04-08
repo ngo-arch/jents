@@ -1174,6 +1174,8 @@ async function toggleChannel(agentId, plugin) {
 }
 
 // --- Files Panel ---
+let allFilesCache = [];
+
 async function toggleFiles() {
   const panel = document.getElementById('files-panel');
   if (!panel.classList.contains('hidden')) {
@@ -1186,16 +1188,56 @@ async function toggleFiles() {
 }
 
 async function loadFiles() {
-  const files = await api.getRecentFiles();
+  allFilesCache = await api.getRecentFiles();
+  const filterEl = document.getElementById('files-agent-filter');
+
+  // Build unique agents from files
+  const agentMap = new Map();
+  for (const f of allFilesCache) {
+    if (!agentMap.has(f.agentId)) agentMap.set(f.agentId, f.agentName);
+  }
+
+  // Populate dropdown - default to active agent if it has files
+  const prevValue = filterEl.value;
+  filterEl.innerHTML = '';
+  const allOpt = document.createElement('option');
+  allOpt.value = '__all__';
+  allOpt.textContent = 'All Agents';
+  filterEl.appendChild(allOpt);
+  for (const [id, name] of agentMap) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = name;
+    filterEl.appendChild(opt);
+  }
+
+  // Default to active agent if it has files, otherwise keep previous or show all
+  if (prevValue && agentMap.has(prevValue)) {
+    filterEl.value = prevValue;
+  } else if (activeAgentId && agentMap.has(activeAgentId)) {
+    filterEl.value = activeAgentId;
+  } else {
+    filterEl.value = '__all__';
+  }
+
+  renderFiles();
+}
+
+function renderFiles() {
+  const filterEl = document.getElementById('files-agent-filter');
+  const filterValue = filterEl.value;
+  const filtered = filterValue === '__all__' ? allFilesCache : allFilesCache.filter(f => f.agentId === filterValue);
   const listEl = document.getElementById('files-list');
   listEl.innerHTML = '';
 
-  if (files.length === 0) {
+  if (filtered.length === 0) {
     listEl.innerHTML = '<div class="files-empty"><p>No files found</p></div>';
     return;
   }
 
-  for (const file of files) {
+  const showAgentBadge = filterValue === '__all__';
+
+  for (const file of filtered) {
     const item = document.createElement('div');
     item.className = 'file-item';
 
@@ -1203,13 +1245,17 @@ async function loadFiles() {
     const timeAgo = formatTimeAgo(file.mtime);
     const size = formatSize(file.size);
 
+    const agentBadge = showAgentBadge
+      ? `<span class="file-agent-badge" style="background:${sanitizeColor(file.agentColor)}">${escapeHtml(file.agentName)}</span>`
+      : '';
+
     item.innerHTML = `
       <div class="file-icon" data-ext="${escapeHtml(ext)}">${escapeHtml(ext.slice(0, 3))}</div>
       <div class="file-details">
         <div class="file-name">${escapeHtml(file.name)}</div>
         <div class="file-path">${escapeHtml(file.relativePath)}</div>
         <div class="file-meta">
-          <span class="file-agent-badge" style="background:${sanitizeColor(file.agentColor)}">${escapeHtml(file.agentName)}</span>
+          ${agentBadge}
           <span>${timeAgo}</span>
           <span>${size}</span>
         </div>
@@ -1221,7 +1267,6 @@ async function loadFiles() {
       </div>
     `;
 
-    // Click to open file - render .md natively, open others externally
     item.addEventListener('click', (e) => {
       if (e.target.closest('.file-action-btn')) return;
       if (file.name.endsWith('.md')) {
@@ -1231,7 +1276,6 @@ async function loadFiles() {
       }
     });
 
-    // Reveal in Finder
     const revealBtn = item.querySelector('[data-action="reveal"]');
     revealBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1752,6 +1796,7 @@ function setupEventListeners() {
     if (activeAgentId) api.openAgentCwd(activeAgentId);
   });
   document.getElementById('btn-files-refresh').addEventListener('click', loadFiles);
+  document.getElementById('files-agent-filter').addEventListener('change', renderFiles);
 
   // Logs panel
   document.getElementById('btn-close-logs').addEventListener('click', () => {

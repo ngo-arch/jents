@@ -2773,6 +2773,27 @@ html, body {
   font-weight: 600;
 }
 
+#files-agent-filter {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 140px;
+  outline: none;
+}
+
+#files-agent-filter:hover {
+  border-color: var(--border-medium);
+}
+
+#files-agent-filter:focus {
+  border-color: var(--accent);
+}
+
 #files-list {
   flex: 1;
   overflow-y: auto;
