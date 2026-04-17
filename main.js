@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, dialog, nativeImage } = require('electron');
 const { execSync, execFile } = require('child_process');
 const pty = require('node-pty');
 const path = require('path');
@@ -1001,6 +1001,8 @@ ipcMain.handle('agent:open-cwd', (_, agentId) => {
 
 // --- iOS Simulator ---
 
+const SIM_SCREENSHOT_PATH = path.join(os.tmpdir(), 'jents-sim-frame.png');
+
 ipcMain.handle('simulator:list-devices', () => {
   try {
     const out = execSync('xcrun simctl list devices --json', { encoding: 'utf-8', timeout: 5000 });
@@ -1022,7 +1024,6 @@ ipcMain.handle('simulator:list-devices', () => {
 ipcMain.handle('simulator:boot', async (_, udid) => {
   try {
     execSync(`xcrun simctl boot "${udid}"`, { timeout: 15000, stdio: 'pipe' });
-    // Open Simulator.app so it renders
     execSync('open -a Simulator', { timeout: 5000, stdio: 'pipe' });
     return { ok: true };
   } catch (err) {
@@ -1039,37 +1040,30 @@ ipcMain.handle('simulator:shutdown', async (_, udid) => {
   }
 });
 
-ipcMain.handle('simulator:screenshot', async (_, udid) => {
-  try {
-    const target = udid || 'booted';
-    const buf = execSync(`xcrun simctl io "${target}" screenshot --type=png /dev/stdout`, {
-      timeout: 3000, maxBuffer: 10 * 1024 * 1024,
+// Async screenshot: capture to temp file, resize with nativeImage, return JPEG data URI
+ipcMain.handle('simulator:screenshot', (_, udid) => {
+  const target = udid || 'booted';
+  return new Promise((resolve) => {
+    execFile('xcrun', ['simctl', 'io', target, 'screenshot', '--type=png', SIM_SCREENSHOT_PATH], {
+      timeout: 3000,
+    }, (err) => {
+      if (err) { resolve(null); return; }
+      try {
+        const buf = fs.readFileSync(SIM_SCREENSHOT_PATH);
+        const img = nativeImage.createFromBuffer(buf);
+        const size = img.getSize();
+        // Resize to 640px wide max - cuts data ~75% vs retina
+        const resized = size.width > 640
+          ? img.resize({ width: 640, height: Math.round(size.height * (640 / size.width)) })
+          : img;
+        // JPEG at 80% quality - much smaller than PNG
+        const jpeg = resized.toJPEG(80);
+        resolve('data:image/jpeg;base64,' + jpeg.toString('base64'));
+      } catch {
+        resolve(null);
+      }
     });
-    return 'data:image/png;base64,' + buf.toString('base64');
-  } catch {
-    return null;
-  }
-});
-
-ipcMain.handle('simulator:tap', async (_, udid, x, y) => {
-  try {
-    const target = udid || 'booted';
-    execSync(`xcrun simctl io "${target}" input tap ${x} ${y}`, { timeout: 3000, stdio: 'pipe' });
-    return { ok: true };
-  } catch {
-    return { error: 'tap failed' };
-  }
-});
-
-ipcMain.handle('simulator:swipe', async (_, udid, x1, y1, x2, y2, duration) => {
-  try {
-    const target = udid || 'booted';
-    const dur = duration || 0.3;
-    execSync(`xcrun simctl io "${target}" input swipe ${x1} ${y1} ${x2} ${y2} --duration ${dur}`, { timeout: 3000, stdio: 'pipe' });
-    return { ok: true };
-  } catch {
-    return { error: 'swipe failed' };
-  }
+  });
 });
 
 // --- Crons / Scheduled Tasks ---

@@ -1024,22 +1024,28 @@ function startSimPolling(udid) {
   const img = document.getElementById('sim-screen-img');
   const placeholder = document.getElementById('sim-placeholder');
   const dot = document.getElementById('mobile-live-dot');
+  let capturing = false;
 
   async function capture() {
-    if (!mobileViewerOpen) return;
-    const data = await api.simScreenshot(simActiveUdid);
-    if (data) {
-      img.src = data;
-      img.classList.add('active');
-      placeholder.classList.add('hidden');
-      dot.classList.add('active');
-    } else {
-      img.classList.remove('active');
-      placeholder.classList.remove('hidden');
-      dot.classList.remove('active');
+    if (!mobileViewerOpen || capturing) return;
+    capturing = true;
+    try {
+      const data = await api.simScreenshot(simActiveUdid);
+      if (data) {
+        img.src = data;
+        img.classList.add('active');
+        placeholder.classList.add('hidden');
+        dot.classList.add('active');
+      } else {
+        img.classList.remove('active');
+        placeholder.classList.remove('hidden');
+        dot.classList.remove('active');
+      }
+    } finally {
+      capturing = false;
     }
     if (mobileViewerOpen) {
-      simPollingTimer = setTimeout(capture, 333); // ~3fps
+      simPollingTimer = setTimeout(capture, 200); // ~5fps
     }
   }
   capture();
@@ -2114,19 +2120,7 @@ function setupEventListeners() {
       stopSimPolling();
     }
   });
-  // Touch interaction - tap on the simulator image
-  document.getElementById('sim-screen-img').addEventListener('click', async (e) => {
-    if (!simActiveUdid) return;
-    const img = e.target;
-    const rect = img.getBoundingClientRect();
-    // Map click position to simulator coordinates
-    // Simulator screenshots are at device resolution (e.g. 1170x2532 for iPhone 14 Pro)
-    const scaleX = img.naturalWidth / rect.width;
-    const scaleY = img.naturalHeight / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
-    await api.simTap(simActiveUdid, x, y);
-  });
+  // Clicking the sim image is view-only - interact via Simulator.app directly
 
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);
   document.getElementById('btn-close-configure').addEventListener('click', () => {
