@@ -57,8 +57,8 @@ let config = null;
 let activeAgentId = null;
 let readerOpen = false;
 let mobileViewerOpen = false;
-let simPollingTimer = null;
 let simActiveUdid = null;
+let simStream = null;
 let notes = [];
 let todosData = { goals: [], todos: [] };
 let inboxItems = [];
@@ -973,7 +973,7 @@ function toggleMobileViewer() {
     panel.classList.add('hidden');
     mobileViewerOpen = false;
     btn.classList.remove('active');
-    stopSimPolling();
+    stopSimStream();
     if (activeAgentId) {
       const fitAddon = fitAddons.get(activeAgentId);
       if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
@@ -996,7 +996,7 @@ async function refreshSimDeviceList() {
   select.innerHTML = '';
   if (devices.length === 0) {
     select.innerHTML = '<option value="">No simulators available</option>';
-    stopSimPolling();
+    stopSimStream();
     return;
   }
   // Group: booted first, then shutdown
@@ -1012,52 +1012,60 @@ async function refreshSimDeviceList() {
   // Auto-select first booted device and start polling
   if (booted.length > 0) {
     select.value = booted[0].udid;
-    startSimPolling(booted[0].udid);
+    startSimStream(booted[0].udid);
   } else {
-    stopSimPolling();
+    stopSimStream();
   }
 }
 
-function startSimPolling(udid) {
-  stopSimPolling();
+async function startSimStream(udid) {
+  stopSimStream();
   simActiveUdid = udid;
-  const img = document.getElementById('sim-screen-img');
+  const video = document.getElementById('sim-screen-video');
   const placeholder = document.getElementById('sim-placeholder');
   const dot = document.getElementById('mobile-live-dot');
-  let capturing = false;
 
-  async function capture() {
-    if (!mobileViewerOpen || capturing) return;
-    capturing = true;
-    try {
-      const data = await api.simScreenshot(simActiveUdid);
-      if (data) {
-        img.src = data;
-        img.classList.add('active');
-        placeholder.classList.add('hidden');
-        dot.classList.add('active');
-      } else {
-        img.classList.remove('active');
-        placeholder.classList.remove('hidden');
-        dot.classList.remove('active');
-      }
-    } finally {
-      capturing = false;
-    }
-    if (mobileViewerOpen) {
-      simPollingTimer = setTimeout(capture, 200); // ~5fps
-    }
+  const sourceId = await api.simGetSourceId();
+  if (!sourceId) {
+    placeholder.classList.remove('hidden');
+    video.classList.remove('active');
+    dot.classList.remove('active');
+    return;
   }
-  capture();
+
+  try {
+    simStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: 'desktop',
+          chromeMediaSourceId: sourceId,
+          maxFrameRate: 30,
+        },
+      },
+    });
+    video.srcObject = simStream;
+    video.classList.add('active');
+    placeholder.classList.add('hidden');
+    dot.classList.add('active');
+  } catch {
+    placeholder.classList.remove('hidden');
+    video.classList.remove('active');
+    dot.classList.remove('active');
+  }
 }
 
-function stopSimPolling() {
-  if (simPollingTimer) {
-    clearTimeout(simPollingTimer);
-    simPollingTimer = null;
+function stopSimStream() {
+  if (simStream) {
+    simStream.getTracks().forEach(t => t.stop());
+    simStream = null;
   }
+  const video = document.getElementById('sim-screen-video');
+  video.srcObject = null;
+  video.classList.remove('active');
   simActiveUdid = null;
   document.getElementById('mobile-live-dot').classList.remove('active');
+  document.getElementById('sim-placeholder').classList.remove('hidden');
 }
 
 function toggleNotepad() {
@@ -2111,17 +2119,17 @@ function setupEventListeners() {
   });
   document.getElementById('sim-device-select').addEventListener('change', (e) => {
     const udid = e.target.value;
-    if (!udid) { stopSimPolling(); return; }
+    if (!udid) { stopSimStream(); return; }
     // Check if this device is booted by looking at the option text
     const opt = e.target.options[e.target.selectedIndex];
     if (opt && opt.textContent.includes('Running')) {
-      startSimPolling(udid);
+      startSimStream(udid);
     } else {
-      stopSimPolling();
+      stopSimStream();
     }
   });
-  // Click on mirror image -> click in Simulator.app at mapped screen coordinates
-  document.getElementById('sim-screen-img').addEventListener('click', async (e) => {
+  // Click on mirror video -> click in Simulator.app at mapped screen coordinates
+  document.getElementById('sim-screen-video').addEventListener('click', async (e) => {
     if (!simActiveUdid) return;
     const img = e.target;
     const rect = img.getBoundingClientRect();

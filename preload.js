@@ -72,7 +72,7 @@ contextBridge.exposeInMainWorld('api', {
   simListDevices: () => ipcRenderer.invoke('simulator:list-devices'),
   simBoot: (udid) => ipcRenderer.invoke('simulator:boot', udid),
   simShutdown: (udid) => ipcRenderer.invoke('simulator:shutdown', udid),
-  simScreenshot: (udid) => ipcRenderer.invoke('simulator:screenshot', udid),
+  simGetSourceId: () => ipcRenderer.invoke('simulator:get-source-id'),
   simWindowInfo: () => ipcRenderer.invoke('simulator:window-info'),
   simClick: (x, y) => ipcRenderer.invoke('simulator:click', x, y),
 

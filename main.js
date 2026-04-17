@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, shell, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, dialog, nativeImage, desktopCapturer } = require('electron');
 const { execSync, execFile } = require('child_process');
 const pty = require('node-pty');
 const path = require('path');
@@ -1001,8 +1001,6 @@ ipcMain.handle('agent:open-cwd', (_, agentId) => {
 
 // --- iOS Simulator ---
 
-const SIM_SCREENSHOT_PATH = path.join(os.tmpdir(), 'jents-sim-frame.png');
-
 ipcMain.handle('simulator:list-devices', () => {
   try {
     const out = execSync('xcrun simctl list devices --json', { encoding: 'utf-8', timeout: 5000 });
@@ -1040,30 +1038,20 @@ ipcMain.handle('simulator:shutdown', async (_, udid) => {
   }
 });
 
-// Async screenshot: capture to temp file, resize with nativeImage, return JPEG data URI
-ipcMain.handle('simulator:screenshot', (_, udid) => {
-  const target = udid || 'booted';
-  return new Promise((resolve) => {
-    execFile('xcrun', ['simctl', 'io', target, 'screenshot', '--type=png', SIM_SCREENSHOT_PATH], {
-      timeout: 3000,
-    }, (err) => {
-      if (err) { resolve(null); return; }
-      try {
-        const buf = fs.readFileSync(SIM_SCREENSHOT_PATH);
-        const img = nativeImage.createFromBuffer(buf);
-        const size = img.getSize();
-        // Resize to 640px wide max - cuts data ~75% vs retina
-        const resized = size.width > 640
-          ? img.resize({ width: 640, height: Math.round(size.height * (640 / size.width)) })
-          : img;
-        // JPEG at 80% quality - much smaller than PNG
-        const jpeg = resized.toJPEG(80);
-        resolve('data:image/jpeg;base64,' + jpeg.toString('base64'));
-      } catch {
-        resolve(null);
-      }
-    });
-  });
+// Return the desktopCapturer source ID for the Simulator window
+ipcMain.handle('simulator:get-source-id', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['window'] });
+    // Look for the Simulator device window (contains device name like "iPhone")
+    const sim = sources.find(s =>
+      s.name.includes('Simulator') ||
+      s.name.includes('iPhone') ||
+      s.name.includes('iPad')
+    );
+    return sim ? sim.id : null;
+  } catch {
+    return null;
+  }
 });
 
 // Get Simulator window position/size for click mapping
