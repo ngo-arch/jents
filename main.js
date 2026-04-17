@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, shell, dialog, nativeImage, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, dialog, nativeImage } = require('electron');
 const { execSync, execFile } = require('child_process');
 const pty = require('node-pty');
 const path = require('path');
@@ -997,109 +997,6 @@ ipcMain.handle('agent:open-cwd', (_, agentId) => {
     const resolved = agent.cwd.replace(/^~/, os.homedir());
     shell.openPath(resolved);
   }
-});
-
-// --- iOS Simulator ---
-
-ipcMain.handle('simulator:list-devices', () => {
-  try {
-    const out = execSync('xcrun simctl list devices --json', { encoding: 'utf-8', timeout: 5000 });
-    const data = JSON.parse(out);
-    const devices = [];
-    for (const [runtime, devs] of Object.entries(data.devices)) {
-      for (const d of devs) {
-        if (d.isAvailable) {
-          devices.push({ udid: d.udid, name: d.name, state: d.state, runtime });
-        }
-      }
-    }
-    return devices;
-  } catch {
-    return [];
-  }
-});
-
-ipcMain.handle('simulator:boot', async (_, udid) => {
-  try {
-    execSync(`xcrun simctl boot "${udid}"`, { timeout: 15000, stdio: 'pipe' });
-    execSync('open -a Simulator', { timeout: 5000, stdio: 'pipe' });
-    return { ok: true };
-  } catch (err) {
-    return { error: err.message };
-  }
-});
-
-ipcMain.handle('simulator:shutdown', async (_, udid) => {
-  try {
-    execSync(`xcrun simctl shutdown "${udid}"`, { timeout: 10000, stdio: 'pipe' });
-    return { ok: true };
-  } catch (err) {
-    return { error: err.message };
-  }
-});
-
-// Return the desktopCapturer source ID for the Simulator window
-ipcMain.handle('simulator:get-source-id', async () => {
-  try {
-    const sources = await desktopCapturer.getSources({ types: ['window'] });
-    // Look for the Simulator device window (contains device name like "iPhone")
-    const sim = sources.find(s =>
-      s.name.includes('Simulator') ||
-      s.name.includes('iPhone') ||
-      s.name.includes('iPad')
-    );
-    return sim ? sim.id : null;
-  } catch {
-    return null;
-  }
-});
-
-// Get Simulator window position/size for click mapping
-ipcMain.handle('simulator:window-info', () => {
-  try {
-    const script = 'tell application "System Events" to tell process "Simulator" to return {position of window 1, size of window 1}';
-    const out = execSync(`osascript -e '${script}'`, { encoding: 'utf-8', timeout: 3000 }).trim();
-    const nums = out.split(',').map(s => parseInt(s.trim()));
-    return { x: nums[0], y: nums[1], w: nums[2], h: nums[3] };
-  } catch {
-    return null;
-  }
-});
-
-// Click in Simulator at screen coordinates via CGEvents, then refocus Jents
-ipcMain.handle('simulator:click', (_, screenX, screenY) => {
-  const sx = Math.round(screenX);
-  const sy = Math.round(screenY);
-  const appName = app.getName();
-  const script = `
-ObjC.import("CoreGraphics");
-ObjC.import("AppKit");
-var ws = $.NSWorkspace.sharedWorkspace;
-var apps = ws.runningApplications;
-for (var i = 0; i < apps.count; i++) {
-  if (apps.objectAtIndex(i).localizedName.js === "Simulator") {
-    apps.objectAtIndex(i).activateWithOptions(0);
-    break;
-  }
-}
-delay(0.12);
-var pt = $.CGPointMake(${sx}, ${sy});
-var down = $.CGEventCreateMouseEvent(null, $.kCGEventLeftMouseDown, pt, 0);
-$.CGEventPost($.kCGHIDEventTap, down);
-delay(0.04);
-var up = $.CGEventCreateMouseEvent(null, $.kCGEventLeftMouseUp, pt, 0);
-$.CGEventPost($.kCGHIDEventTap, up);
-delay(0.08);
-for (var i = 0; i < apps.count; i++) {
-  var name = apps.objectAtIndex(i).localizedName.js;
-  if (name === "${appName}" || name === "Jents" || name === "Jents Test") {
-    apps.objectAtIndex(i).activateWithOptions(0);
-    break;
-  }
-}
-`;
-  execFile('osascript', ['-l', 'JavaScript', '-e', script], { timeout: 5000 }, () => {});
-  return { ok: true };
 });
 
 // --- Crons / Scheduled Tasks ---

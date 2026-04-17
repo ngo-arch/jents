@@ -68,14 +68,6 @@ contextBridge.exposeInMainWorld('api', {
   listRuns: (agentId) => ipcRenderer.invoke('runs:list', agentId),
   getRun: (runId) => ipcRenderer.invoke('runs:get', runId),
 
-  // iOS Simulator
-  simListDevices: () => ipcRenderer.invoke('simulator:list-devices'),
-  simBoot: (udid) => ipcRenderer.invoke('simulator:boot', udid),
-  simShutdown: (udid) => ipcRenderer.invoke('simulator:shutdown', udid),
-  simGetSourceId: () => ipcRenderer.invoke('simulator:get-source-id'),
-  simWindowInfo: () => ipcRenderer.invoke('simulator:window-info'),
-  simClick: (x, y) => ipcRenderer.invoke('simulator:click', x, y),
-
   onData:  (cb) => ipcRenderer.on('agent:data', (_, id, data) => cb(id, data)),
   onExit:  (cb) => ipcRenderer.on('agent:exit', (_, id, code) => cb(id, code)),
   onFocus: (cb) => ipcRenderer.on('agent:focus', (_, id, wsId) => cb(id, wsId)),

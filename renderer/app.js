@@ -56,9 +56,6 @@ const mdTheme = EditorView.theme({
 let config = null;
 let activeAgentId = null;
 let readerOpen = false;
-let mobileViewerOpen = false;
-let simActiveUdid = null;
-let simStream = null;
 let notes = [];
 let todosData = { goals: [], todos: [] };
 let inboxItems = [];
@@ -969,108 +966,6 @@ function closeAllPanels() {
   for (const id of ['logs-panel', 'files-panel', 'notepad-panel', 'configure-panel', 'help-panel', 'crons-panel', 'todos-panel', 'inbox-panel']) {
     document.getElementById(id).classList.add('hidden');
   }
-}
-
-function toggleMobileViewer() {
-  const panel = document.getElementById('mobile-viewer');
-  const btn = document.getElementById('btn-mobile-viewer');
-  if (mobileViewerOpen) {
-    panel.classList.add('hidden');
-    mobileViewerOpen = false;
-    btn.classList.remove('active');
-    stopSimStream();
-    if (activeAgentId) {
-      const fitAddon = fitAddons.get(activeAgentId);
-      if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
-    }
-  } else {
-    panel.classList.remove('hidden');
-    mobileViewerOpen = true;
-    btn.classList.add('active');
-    refreshSimDeviceList();
-    if (activeAgentId) {
-      const fitAddon = fitAddons.get(activeAgentId);
-      if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
-    }
-  }
-}
-
-async function refreshSimDeviceList() {
-  const select = document.getElementById('sim-device-select');
-  const devices = await api.simListDevices();
-  select.innerHTML = '';
-  if (devices.length === 0) {
-    select.innerHTML = '<option value="">No simulators available</option>';
-    stopSimStream();
-    return;
-  }
-  // Group: booted first, then shutdown
-  const booted = devices.filter(d => d.state === 'Booted');
-  const shutdown = devices.filter(d => d.state === 'Shutdown');
-  for (const d of [...booted, ...shutdown]) {
-    const opt = document.createElement('option');
-    opt.value = d.udid;
-    const runtime = d.runtime.replace(/.*SimRuntime\./, '').replace(/-/g, ' ');
-    opt.textContent = `${d.name} (${runtime})${d.state === 'Booted' ? ' - Running' : ''}`;
-    select.appendChild(opt);
-  }
-  // Auto-select first booted device and start polling
-  if (booted.length > 0) {
-    select.value = booted[0].udid;
-    startSimStream(booted[0].udid);
-  } else {
-    stopSimStream();
-  }
-}
-
-async function startSimStream(udid) {
-  stopSimStream();
-  simActiveUdid = udid;
-  const video = document.getElementById('sim-screen-video');
-  const placeholder = document.getElementById('sim-placeholder');
-  const dot = document.getElementById('mobile-live-dot');
-
-  const sourceId = await api.simGetSourceId();
-  if (!sourceId) {
-    placeholder.classList.remove('hidden');
-    video.classList.remove('active');
-    dot.classList.remove('active');
-    return;
-  }
-
-  try {
-    simStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        mandatory: {
-          chromeMediaSource: 'desktop',
-          chromeMediaSourceId: sourceId,
-          maxFrameRate: 30,
-        },
-      },
-    });
-    video.srcObject = simStream;
-    video.classList.add('active');
-    placeholder.classList.add('hidden');
-    dot.classList.add('active');
-  } catch {
-    placeholder.classList.remove('hidden');
-    video.classList.remove('active');
-    dot.classList.remove('active');
-  }
-}
-
-function stopSimStream() {
-  if (simStream) {
-    simStream.getTracks().forEach(t => t.stop());
-    simStream = null;
-  }
-  const video = document.getElementById('sim-screen-video');
-  video.srcObject = null;
-  video.classList.remove('active');
-  simActiveUdid = null;
-  document.getElementById('mobile-live-dot').classList.remove('active');
-  document.getElementById('sim-placeholder').classList.remove('hidden');
 }
 
 function toggleNotepad() {
@@ -2101,56 +1996,6 @@ function setupEventListeners() {
   document.getElementById('btn-reader-cancel-edit').addEventListener('click', cancelReaderEdit);
   document.getElementById('btn-mode-source').addEventListener('click', () => switchReaderMode('source'));
   document.getElementById('btn-mode-preview').addEventListener('click', () => switchReaderMode('preview'));
-  // Mobile viewer (iOS Simulator)
-  document.getElementById('btn-mobile-viewer').addEventListener('click', toggleMobileViewer);
-  document.getElementById('btn-mobile-close').addEventListener('click', toggleMobileViewer);
-  document.getElementById('btn-sim-refresh').addEventListener('click', refreshSimDeviceList);
-  document.getElementById('btn-sim-boot').addEventListener('click', async () => {
-    const select = document.getElementById('sim-device-select');
-    const udid = select.value;
-    if (!udid) return;
-    const result = await api.simBoot(udid);
-    if (result.ok) {
-      showToast('Simulator booting...', 'success');
-      // Wait a moment for boot, then refresh and start polling
-      setTimeout(async () => {
-        await refreshSimDeviceList();
-      }, 3000);
-    } else {
-      showToast(result.error || 'Failed to boot', 'error');
-      // May already be booted - try refreshing
-      await refreshSimDeviceList();
-    }
-  });
-  document.getElementById('sim-device-select').addEventListener('change', (e) => {
-    const udid = e.target.value;
-    if (!udid) { stopSimStream(); return; }
-    // Check if this device is booted by looking at the option text
-    const opt = e.target.options[e.target.selectedIndex];
-    if (opt && opt.textContent.includes('Running')) {
-      startSimStream(udid);
-    } else {
-      stopSimStream();
-    }
-  });
-  // Click on mirror video -> click in Simulator.app at mapped screen coordinates
-  document.getElementById('sim-screen-video').addEventListener('click', async (e) => {
-    if (!simActiveUdid) return;
-    const img = e.target;
-    const rect = img.getBoundingClientRect();
-    // Relative position within the mirror (0-1)
-    const relX = (e.clientX - rect.left) / rect.width;
-    const relY = (e.clientY - rect.top) / rect.height;
-    // Get Simulator window bounds
-    const win = await api.simWindowInfo();
-    if (!win) return;
-    // Map to screen coordinates (28px title bar offset)
-    const titleBar = 28;
-    const screenX = win.x + relX * win.w;
-    const screenY = win.y + titleBar + relY * (win.h - titleBar);
-    await api.simClick(screenX, screenY);
-  });
-
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);
   document.getElementById('btn-close-configure').addEventListener('click', () => {
     document.getElementById('configure-panel').classList.add('hidden');
@@ -2343,7 +2188,6 @@ function setupEventListeners() {
       if (commandPaletteOpen) { closeCommandPalette(); return; }
       if (terminalSearchOpen) { closeTerminalSearch(); return; }
       if (readerOpen) { closeReader(); return; }
-      if (mobileViewerOpen) { toggleMobileViewer(); return; }
       // Side panels
       const panelIds = ['configure-panel', 'help-panel', 'notepad-panel', 'todos-panel', 'inbox-panel', 'logs-panel', 'files-panel', 'crons-panel'];
       for (const id of panelIds) {
@@ -2423,13 +2267,6 @@ function setupEventListeners() {
       if (e.key === 'i') {
         e.preventDefault();
         toggleInbox();
-        return;
-      }
-
-      // Cmd+Shift+M toggle mobile viewer
-      if (e.key === 'm' && e.shiftKey) {
-        e.preventDefault();
-        toggleMobileViewer();
         return;
       }
 
@@ -4282,7 +4119,6 @@ const COMMANDS = [
   { label: 'Stop Agent', shortcut: [], action: () => armStop() },
   { label: 'Toggle Notepad', shortcut: ['Cmd', 'E'], action: () => toggleNotepad() },
   { label: 'Toggle Reader View', shortcut: ['Cmd', 'D'], action: () => toggleReader() },
-  { label: 'Toggle Mobile Viewer', shortcut: ['Cmd', 'Shift', 'M'], action: () => toggleMobileViewer() },
   { label: 'Toggle File Manager', shortcut: ['Cmd', 'Shift', 'F'], action: () => toggleFiles() },
   { label: 'Toggle Sidebar', shortcut: ['Cmd', 'B'], action: () => toggleSidebar() },
   { label: 'Scheduled Tasks', shortcut: [], action: () => toggleCrons() },
