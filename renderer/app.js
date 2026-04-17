@@ -662,11 +662,16 @@ function renderSidebar() {
       ? `<div class="agent-item-summary" title="${escapeHtml(latestRun.summary)}">${escapeHtml(truncate(latestRun.summary, 40))} - ${formatTimeAgo(latestRun.endedAt)}</div>`
       : '';
 
+    const descHtml = agent.description
+      ? `<div class="agent-item-desc" title="${escapeHtml(agent.description)}">${escapeHtml(truncate(agent.description, 50))}</div>`
+      : '';
+
     item.innerHTML = `
       <div class="agent-avatar" style="background:${sanitizeColor(agent.color)}">${escapeHtml(agent.shortName)}</div>
       <div class="agent-details">
         <div class="agent-item-name">${escapeHtml(agent.shortName)}</div>
         <div class="agent-item-role">${escapeHtml(agent.name)}</div>
+        ${descHtml}
         ${summaryHtml}
         ${badgesHtml}
       </div>
@@ -3858,6 +3863,10 @@ async function renderConfigurePanel() {
       <input id="cfg-command" type="text" value="${escapeHtml(agent.command)}" spellcheck="false" />
     </div>
     <div class="form-group">
+      <label>Description</label>
+      <input id="cfg-description" type="text" value="${escapeHtml(agent.description || '')}" placeholder="What is this instance working on?" spellcheck="false" />
+    </div>
+    <div class="form-group">
       <label>Color</label>
       <div id="cfg-color-picker"></div>
     </div>
@@ -4136,11 +4145,12 @@ async function saveConfigureAgent() {
   const shortName = document.getElementById('cfg-shortname').value.trim();
   const cwd = document.getElementById('cfg-cwd').value.trim();
   const command = document.getElementById('cfg-command').value.trim();
+  const description = document.getElementById('cfg-description').value.trim();
   if (!name || !shortName || !cwd || !command) {
     showToast('All fields are required', 'error');
     return;
   }
-  const updated = await api.updateAgent(activeAgentId, { name, shortName, cwd, command, color: selectedColor });
+  const updated = await api.updateAgent(activeAgentId, { name, shortName, cwd, command, description, color: selectedColor });
   if (updated) config = updated;
   renderSidebar();
   selectAgent(activeAgentId);

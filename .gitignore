@@ -7,5 +7,10 @@ logs/
 window-state.json
 bugs.json
 notes.json
+todos.json
+inbox.json
+runs.json
+workspaces.json
+team-*.json
 launch-test.sh
 icon.svg.png

@@ -4195,6 +4195,18 @@ html, body {
   background: var(--bg-hover);
 }
 
+/* === Sidebar Agent Description === */
+.agent-item-desc {
+  font-size: 11px;
+  color: var(--text-secondary, #9090aa);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  margin-top: 1px;
+  font-style: italic;
+}
+
 /* === Sidebar Agent Summary === */
 .agent-item-summary {
   font-size: 11px;
