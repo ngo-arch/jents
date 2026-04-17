@@ -1066,6 +1066,54 @@ ipcMain.handle('simulator:screenshot', (_, udid) => {
   });
 });
 
+// Get Simulator window position/size for click mapping
+ipcMain.handle('simulator:window-info', () => {
+  try {
+    const script = 'tell application "System Events" to tell process "Simulator" to return {position of window 1, size of window 1}';
+    const out = execSync(`osascript -e '${script}'`, { encoding: 'utf-8', timeout: 3000 }).trim();
+    const nums = out.split(',').map(s => parseInt(s.trim()));
+    return { x: nums[0], y: nums[1], w: nums[2], h: nums[3] };
+  } catch {
+    return null;
+  }
+});
+
+// Click in Simulator at screen coordinates via CGEvents, then refocus Jents
+ipcMain.handle('simulator:click', (_, screenX, screenY) => {
+  const sx = Math.round(screenX);
+  const sy = Math.round(screenY);
+  const appName = app.getName();
+  const script = `
+ObjC.import("CoreGraphics");
+ObjC.import("AppKit");
+var ws = $.NSWorkspace.sharedWorkspace;
+var apps = ws.runningApplications;
+for (var i = 0; i < apps.count; i++) {
+  if (apps.objectAtIndex(i).localizedName.js === "Simulator") {
+    apps.objectAtIndex(i).activateWithOptions(0);
+    break;
+  }
+}
+delay(0.12);
+var pt = $.CGPointMake(${sx}, ${sy});
+var down = $.CGEventCreateMouseEvent(null, $.kCGEventLeftMouseDown, pt, 0);
+$.CGEventPost($.kCGHIDEventTap, down);
+delay(0.04);
+var up = $.CGEventCreateMouseEvent(null, $.kCGEventLeftMouseUp, pt, 0);
+$.CGEventPost($.kCGHIDEventTap, up);
+delay(0.08);
+for (var i = 0; i < apps.count; i++) {
+  var name = apps.objectAtIndex(i).localizedName.js;
+  if (name === "${appName}" || name === "Jents" || name === "Jents Test") {
+    apps.objectAtIndex(i).activateWithOptions(0);
+    break;
+  }
+}
+`;
+  execFile('osascript', ['-l', 'JavaScript', '-e', script], { timeout: 5000 }, () => {});
+  return { ok: true };
+});
+
 // --- Crons / Scheduled Tasks ---
 
 function isAgentRelatedPlist(plistPath) {

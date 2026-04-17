@@ -2120,7 +2120,23 @@ function setupEventListeners() {
       stopSimPolling();
     }
   });
-  // Clicking the sim image is view-only - interact via Simulator.app directly
+  // Click on mirror image -> click in Simulator.app at mapped screen coordinates
+  document.getElementById('sim-screen-img').addEventListener('click', async (e) => {
+    if (!simActiveUdid) return;
+    const img = e.target;
+    const rect = img.getBoundingClientRect();
+    // Relative position within the mirror (0-1)
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    // Get Simulator window bounds
+    const win = await api.simWindowInfo();
+    if (!win) return;
+    // Map to screen coordinates (28px title bar offset)
+    const titleBar = 28;
+    const screenX = win.x + relX * win.w;
+    const screenY = win.y + titleBar + relY * (win.h - titleBar);
+    await api.simClick(screenX, screenY);
+  });
 
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);
   document.getElementById('btn-close-configure').addEventListener('click', () => {

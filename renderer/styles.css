@@ -2092,6 +2092,7 @@ html, body {
   object-fit: contain;
   border-radius: 37px;
   display: none;
+  cursor: pointer;
   user-select: none;
   -webkit-user-drag: none;
 }
