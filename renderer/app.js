@@ -57,7 +57,8 @@ let config = null;
 let activeAgentId = null;
 let readerOpen = false;
 let mobileViewerOpen = false;
-let mobileViewerUrl = '';
+let simPollingTimer = null;
+let simActiveUdid = null;
 let notes = [];
 let todosData = { goals: [], todos: [] };
 let inboxItems = [];
@@ -972,7 +973,7 @@ function toggleMobileViewer() {
     panel.classList.add('hidden');
     mobileViewerOpen = false;
     btn.classList.remove('active');
-    // Refit terminal
+    stopSimPolling();
     if (activeAgentId) {
       const fitAddon = fitAddons.get(activeAgentId);
       if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
@@ -981,12 +982,7 @@ function toggleMobileViewer() {
     panel.classList.remove('hidden');
     mobileViewerOpen = true;
     btn.classList.add('active');
-    // Load URL if set
-    const input = document.getElementById('mobile-url-input');
-    if (input.value && !mobileViewerUrl) {
-      navigateMobileViewer(input.value);
-    }
-    // Refit terminal to smaller width
+    refreshSimDeviceList();
     if (activeAgentId) {
       const fitAddon = fitAddons.get(activeAgentId);
       if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
@@ -994,17 +990,68 @@ function toggleMobileViewer() {
   }
 }
 
-function navigateMobileViewer(url) {
-  if (!url) return;
-  // Add protocol if missing
-  if (!/^https?:\/\//.test(url)) {
-    url = 'http://' + url;
+async function refreshSimDeviceList() {
+  const select = document.getElementById('sim-device-select');
+  const devices = await api.simListDevices();
+  select.innerHTML = '';
+  if (devices.length === 0) {
+    select.innerHTML = '<option value="">No simulators available</option>';
+    stopSimPolling();
+    return;
   }
-  mobileViewerUrl = url;
-  const webview = document.getElementById('mobile-webview');
-  webview.src = url;
-  // Update input to show clean URL
-  document.getElementById('mobile-url-input').value = url.replace(/^https?:\/\//, '');
+  // Group: booted first, then shutdown
+  const booted = devices.filter(d => d.state === 'Booted');
+  const shutdown = devices.filter(d => d.state === 'Shutdown');
+  for (const d of [...booted, ...shutdown]) {
+    const opt = document.createElement('option');
+    opt.value = d.udid;
+    const runtime = d.runtime.replace(/.*SimRuntime\./, '').replace(/-/g, ' ');
+    opt.textContent = `${d.name} (${runtime})${d.state === 'Booted' ? ' - Running' : ''}`;
+    select.appendChild(opt);
+  }
+  // Auto-select first booted device and start polling
+  if (booted.length > 0) {
+    select.value = booted[0].udid;
+    startSimPolling(booted[0].udid);
+  } else {
+    stopSimPolling();
+  }
+}
+
+function startSimPolling(udid) {
+  stopSimPolling();
+  simActiveUdid = udid;
+  const img = document.getElementById('sim-screen-img');
+  const placeholder = document.getElementById('sim-placeholder');
+  const dot = document.getElementById('mobile-live-dot');
+
+  async function capture() {
+    if (!mobileViewerOpen) return;
+    const data = await api.simScreenshot(simActiveUdid);
+    if (data) {
+      img.src = data;
+      img.classList.add('active');
+      placeholder.classList.add('hidden');
+      dot.classList.add('active');
+    } else {
+      img.classList.remove('active');
+      placeholder.classList.remove('hidden');
+      dot.classList.remove('active');
+    }
+    if (mobileViewerOpen) {
+      simPollingTimer = setTimeout(capture, 333); // ~3fps
+    }
+  }
+  capture();
+}
+
+function stopSimPolling() {
+  if (simPollingTimer) {
+    clearTimeout(simPollingTimer);
+    simPollingTimer = null;
+  }
+  simActiveUdid = null;
+  document.getElementById('mobile-live-dot').classList.remove('active');
 }
 
 function toggleNotepad() {
@@ -2035,26 +2082,50 @@ function setupEventListeners() {
   document.getElementById('btn-reader-cancel-edit').addEventListener('click', cancelReaderEdit);
   document.getElementById('btn-mode-source').addEventListener('click', () => switchReaderMode('source'));
   document.getElementById('btn-mode-preview').addEventListener('click', () => switchReaderMode('preview'));
-  // Mobile viewer
+  // Mobile viewer (iOS Simulator)
   document.getElementById('btn-mobile-viewer').addEventListener('click', toggleMobileViewer);
   document.getElementById('btn-mobile-close').addEventListener('click', toggleMobileViewer);
-  document.getElementById('btn-mobile-refresh').addEventListener('click', () => {
-    const webview = document.getElementById('mobile-webview');
-    if (webview.src && webview.src !== 'about:blank') webview.reload();
-  });
-  document.getElementById('btn-mobile-back').addEventListener('click', () => {
-    const webview = document.getElementById('mobile-webview');
-    if (webview.canGoBack()) webview.goBack();
-  });
-  document.getElementById('btn-mobile-forward').addEventListener('click', () => {
-    const webview = document.getElementById('mobile-webview');
-    if (webview.canGoForward()) webview.goForward();
-  });
-  document.getElementById('mobile-url-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      navigateMobileViewer(e.target.value);
+  document.getElementById('btn-sim-refresh').addEventListener('click', refreshSimDeviceList);
+  document.getElementById('btn-sim-boot').addEventListener('click', async () => {
+    const select = document.getElementById('sim-device-select');
+    const udid = select.value;
+    if (!udid) return;
+    const result = await api.simBoot(udid);
+    if (result.ok) {
+      showToast('Simulator booting...', 'success');
+      // Wait a moment for boot, then refresh and start polling
+      setTimeout(async () => {
+        await refreshSimDeviceList();
+      }, 3000);
+    } else {
+      showToast(result.error || 'Failed to boot', 'error');
+      // May already be booted - try refreshing
+      await refreshSimDeviceList();
     }
+  });
+  document.getElementById('sim-device-select').addEventListener('change', (e) => {
+    const udid = e.target.value;
+    if (!udid) { stopSimPolling(); return; }
+    // Check if this device is booted by looking at the option text
+    const opt = e.target.options[e.target.selectedIndex];
+    if (opt && opt.textContent.includes('Running')) {
+      startSimPolling(udid);
+    } else {
+      stopSimPolling();
+    }
+  });
+  // Touch interaction - tap on the simulator image
+  document.getElementById('sim-screen-img').addEventListener('click', async (e) => {
+    if (!simActiveUdid) return;
+    const img = e.target;
+    const rect = img.getBoundingClientRect();
+    // Map click position to simulator coordinates
+    // Simulator screenshots are at device resolution (e.g. 1170x2532 for iPhone 14 Pro)
+    const scaleX = img.naturalWidth / rect.width;
+    const scaleY = img.naturalHeight / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+    await api.simTap(simActiveUdid, x, y);
   });
 
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);

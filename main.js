@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, Notification, shell, dialog } = require('electron');
-const { execSync } = require('child_process');
+const { execSync, execFile } = require('child_process');
 const pty = require('node-pty');
 const path = require('path');
 const fs = require('fs');
@@ -996,6 +996,79 @@ ipcMain.handle('agent:open-cwd', (_, agentId) => {
   if (agent && agent.cwd) {
     const resolved = agent.cwd.replace(/^~/, os.homedir());
     shell.openPath(resolved);
+  }
+});
+
+// --- iOS Simulator ---
+
+ipcMain.handle('simulator:list-devices', () => {
+  try {
+    const out = execSync('xcrun simctl list devices --json', { encoding: 'utf-8', timeout: 5000 });
+    const data = JSON.parse(out);
+    const devices = [];
+    for (const [runtime, devs] of Object.entries(data.devices)) {
+      for (const d of devs) {
+        if (d.isAvailable) {
+          devices.push({ udid: d.udid, name: d.name, state: d.state, runtime });
+        }
+      }
+    }
+    return devices;
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('simulator:boot', async (_, udid) => {
+  try {
+    execSync(`xcrun simctl boot "${udid}"`, { timeout: 15000, stdio: 'pipe' });
+    // Open Simulator.app so it renders
+    execSync('open -a Simulator', { timeout: 5000, stdio: 'pipe' });
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('simulator:shutdown', async (_, udid) => {
+  try {
+    execSync(`xcrun simctl shutdown "${udid}"`, { timeout: 10000, stdio: 'pipe' });
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('simulator:screenshot', async (_, udid) => {
+  try {
+    const target = udid || 'booted';
+    const buf = execSync(`xcrun simctl io "${target}" screenshot --type=png /dev/stdout`, {
+      timeout: 3000, maxBuffer: 10 * 1024 * 1024,
+    });
+    return 'data:image/png;base64,' + buf.toString('base64');
+  } catch {
+    return null;
+  }
+});
+
+ipcMain.handle('simulator:tap', async (_, udid, x, y) => {
+  try {
+    const target = udid || 'booted';
+    execSync(`xcrun simctl io "${target}" input tap ${x} ${y}`, { timeout: 3000, stdio: 'pipe' });
+    return { ok: true };
+  } catch {
+    return { error: 'tap failed' };
+  }
+});
+
+ipcMain.handle('simulator:swipe', async (_, udid, x1, y1, x2, y2, duration) => {
+  try {
+    const target = udid || 'booted';
+    const dur = duration || 0.3;
+    execSync(`xcrun simctl io "${target}" input swipe ${x1} ${y1} ${x2} ${y2} --duration ${dur}`, { timeout: 3000, stdio: 'pipe' });
+    return { ok: true };
+  } catch {
+    return { error: 'swipe failed' };
   }
 });
 
