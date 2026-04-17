@@ -56,6 +56,8 @@ const mdTheme = EditorView.theme({
 let config = null;
 let activeAgentId = null;
 let readerOpen = false;
+let mobileViewerOpen = false;
+let mobileViewerUrl = '';
 let notes = [];
 let todosData = { goals: [], todos: [] };
 let inboxItems = [];
@@ -961,6 +963,48 @@ function closeAllPanels() {
   for (const id of ['logs-panel', 'files-panel', 'notepad-panel', 'configure-panel', 'help-panel', 'crons-panel', 'todos-panel', 'inbox-panel']) {
     document.getElementById(id).classList.add('hidden');
   }
+}
+
+function toggleMobileViewer() {
+  const panel = document.getElementById('mobile-viewer');
+  const btn = document.getElementById('btn-mobile-viewer');
+  if (mobileViewerOpen) {
+    panel.classList.add('hidden');
+    mobileViewerOpen = false;
+    btn.classList.remove('active');
+    // Refit terminal
+    if (activeAgentId) {
+      const fitAddon = fitAddons.get(activeAgentId);
+      if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
+    }
+  } else {
+    panel.classList.remove('hidden');
+    mobileViewerOpen = true;
+    btn.classList.add('active');
+    // Load URL if set
+    const input = document.getElementById('mobile-url-input');
+    if (input.value && !mobileViewerUrl) {
+      navigateMobileViewer(input.value);
+    }
+    // Refit terminal to smaller width
+    if (activeAgentId) {
+      const fitAddon = fitAddons.get(activeAgentId);
+      if (fitAddon) requestAnimationFrame(() => fitAddon.fit());
+    }
+  }
+}
+
+function navigateMobileViewer(url) {
+  if (!url) return;
+  // Add protocol if missing
+  if (!/^https?:\/\//.test(url)) {
+    url = 'http://' + url;
+  }
+  mobileViewerUrl = url;
+  const webview = document.getElementById('mobile-webview');
+  webview.src = url;
+  // Update input to show clean URL
+  document.getElementById('mobile-url-input').value = url.replace(/^https?:\/\//, '');
 }
 
 function toggleNotepad() {
@@ -1991,6 +2035,28 @@ function setupEventListeners() {
   document.getElementById('btn-reader-cancel-edit').addEventListener('click', cancelReaderEdit);
   document.getElementById('btn-mode-source').addEventListener('click', () => switchReaderMode('source'));
   document.getElementById('btn-mode-preview').addEventListener('click', () => switchReaderMode('preview'));
+  // Mobile viewer
+  document.getElementById('btn-mobile-viewer').addEventListener('click', toggleMobileViewer);
+  document.getElementById('btn-mobile-close').addEventListener('click', toggleMobileViewer);
+  document.getElementById('btn-mobile-refresh').addEventListener('click', () => {
+    const webview = document.getElementById('mobile-webview');
+    if (webview.src && webview.src !== 'about:blank') webview.reload();
+  });
+  document.getElementById('btn-mobile-back').addEventListener('click', () => {
+    const webview = document.getElementById('mobile-webview');
+    if (webview.canGoBack()) webview.goBack();
+  });
+  document.getElementById('btn-mobile-forward').addEventListener('click', () => {
+    const webview = document.getElementById('mobile-webview');
+    if (webview.canGoForward()) webview.goForward();
+  });
+  document.getElementById('mobile-url-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      navigateMobileViewer(e.target.value);
+    }
+  });
+
   document.getElementById('btn-configure').addEventListener('click', toggleConfigure);
   document.getElementById('btn-close-configure').addEventListener('click', () => {
     document.getElementById('configure-panel').classList.add('hidden');
@@ -2183,6 +2249,7 @@ function setupEventListeners() {
       if (commandPaletteOpen) { closeCommandPalette(); return; }
       if (terminalSearchOpen) { closeTerminalSearch(); return; }
       if (readerOpen) { closeReader(); return; }
+      if (mobileViewerOpen) { toggleMobileViewer(); return; }
       // Side panels
       const panelIds = ['configure-panel', 'help-panel', 'notepad-panel', 'todos-panel', 'inbox-panel', 'logs-panel', 'files-panel', 'crons-panel'];
       for (const id of panelIds) {
@@ -2262,6 +2329,13 @@ function setupEventListeners() {
       if (e.key === 'i') {
         e.preventDefault();
         toggleInbox();
+        return;
+      }
+
+      // Cmd+Shift+M toggle mobile viewer
+      if (e.key === 'm' && e.shiftKey) {
+        e.preventDefault();
+        toggleMobileViewer();
         return;
       }
 
@@ -4109,6 +4183,7 @@ const COMMANDS = [
   { label: 'Stop Agent', shortcut: [], action: () => armStop() },
   { label: 'Toggle Notepad', shortcut: ['Cmd', 'E'], action: () => toggleNotepad() },
   { label: 'Toggle Reader View', shortcut: ['Cmd', 'D'], action: () => toggleReader() },
+  { label: 'Toggle Mobile Viewer', shortcut: ['Cmd', 'Shift', 'M'], action: () => toggleMobileViewer() },
   { label: 'Toggle File Manager', shortcut: ['Cmd', 'Shift', 'F'], action: () => toggleFiles() },
   { label: 'Toggle Sidebar', shortcut: ['Cmd', 'B'], action: () => toggleSidebar() },
   { label: 'Scheduled Tasks', shortcut: [], action: () => toggleCrons() },

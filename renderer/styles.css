@@ -1983,6 +1983,156 @@ html, body {
 
 /* (terminal-container overlays handled by #main position: relative above) */
 
+/* === Terminal Split (terminal + mobile viewer) === */
+#terminal-split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* === Mobile Viewer === */
+#mobile-viewer {
+  width: 380px;
+  min-width: 380px;
+  display: flex;
+  flex-direction: column;
+  background: #0a0612;
+  border-left: 1px solid var(--border-subtle);
+  animation: slideIn var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#mobile-viewer.hidden {
+  display: none;
+}
+
+#mobile-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: #0a0612;
+}
+
+#mobile-viewer-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.mobile-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-nav-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mobile-nav-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#mobile-url-input {
+  flex: 1;
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+#mobile-url-input:focus {
+  border-color: var(--accent);
+}
+
+#mobile-phone-frame {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-height: 0;
+}
+
+#mobile-phone-notch {
+  width: 120px;
+  height: 28px;
+  background: #000;
+  border-radius: 0 0 18px 18px;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+#mobile-phone-screen {
+  width: 100%;
+  max-width: 320px;
+  flex: 1;
+  background: #000;
+  border-radius: 40px;
+  border: 3px solid #2a2a3a;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05), 0 8px 32px rgba(0,0,0,0.4);
+}
+
+#mobile-webview {
+  flex: 1;
+  border: none;
+  background: #fff;
+  border-radius: 37px;
+}
+
+#mobile-phone-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+}
+
+#mobile-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+  animation: pulse 2s infinite;
+}
+
+#mobile-live-label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
 /* === Notepad Panel === */
 #notepad-panel {
   width: 360px;
