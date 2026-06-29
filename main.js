@@ -688,6 +688,8 @@ ipcMain.handle('config:set-agent-field', (_, agentId, field, value) => {
 
 ipcMain.handle('config:add-agent', (_, newAgent) => {
   const config = getConfig();
+  // Defensive: refuse a duplicate id so a racing double-add can't create twins
+  if (config.agents.some(a => a.id === newAgent.id)) return config;
   config.agents.push(newAgent);
   ensureDir(USER_DATA_DIR);
   fs.writeFileSync(getActiveConfigPath(), JSON.stringify(config, null, 2));

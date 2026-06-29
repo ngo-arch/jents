@@ -66,6 +66,10 @@ const searchAddons = new Map();
 const agentStates = new Map();
 const hasUnread = new Map();
 const agentHasNotification = new Set(); // agents with active desktop notifications
+const activityTimers = new Map(); // agentId -> timeout that flips working -> ready
+const workingAgents = new Set();  // agents producing output right now
+const READY_DEBOUNCE_MS = 700;    // quiet gap after output before "ready"
+let renamingAgentId = null;       // agent whose sidebar label is being edited inline
 let terminalFontSize = 13;
 
 // Workspace state
@@ -628,6 +632,7 @@ async function deleteWorkspace(workspaceId) {
 let draggedAgentId = null;
 
 function renderSidebar() {
+  if (renamingAgentId) return; // don't rebuild while an inline rename input is open
   const list = document.getElementById('agent-list');
   list.innerHTML = '';
 
@@ -637,8 +642,6 @@ function renderSidebar() {
     item.dataset.agentId = agent.id;
     item.style.setProperty('--agent-color', agent.color);
     item.draggable = true;
-
-    const state = agentStates.get(agent.id) || 'stopped';
 
     // Build channel badges
     const channels = agent.channels || [];
@@ -673,12 +676,19 @@ function renderSidebar() {
         ${badgesHtml}
       </div>
       ${removeHtml}
-      <div class="status-dot ${state}${agentHasNotification.has(agent.id) ? ' notified' : ''}" data-status="${escapeHtml(agent.id)}"></div>
+      <div class="${statusDotClass(agent.id)}" data-status="${escapeHtml(agent.id)}"></div>
     `;
 
     item.addEventListener('click', (e) => {
       if (e.target.closest('.agent-remove-btn')) return;
       selectAgent(agent.id);
+    });
+
+    // Double-click the row to rename the instance inline
+    item.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.agent-remove-btn')) return;
+      e.preventDefault();
+      startRenameAgent(agent.id);
     });
 
     const removeBtn = item.querySelector('.agent-remove-btn');
@@ -725,6 +735,50 @@ function renderSidebar() {
 
     list.appendChild(item);
   }
+}
+
+// Inline-rename an instance: swap its sidebar role line for a text input.
+function startRenameAgent(agentId) {
+  if (!agentId || renamingAgentId) return;
+  const agent = config.agents.find(a => a.id === agentId);
+  if (!agent) return;
+  const item = document.querySelector(`.agent-item[data-agent-id="${agentId}"]`);
+  const roleEl = item && item.querySelector('.agent-item-role');
+  if (!roleEl) return;
+
+  renamingAgentId = agentId;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'agent-rename-input';
+  input.value = agent.name;
+  input.spellcheck = false;
+  roleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = async (commit) => {
+    if (done) return;
+    done = true;
+    renamingAgentId = null;
+    const val = input.value.trim();
+    if (commit && val && val !== agent.name) {
+      const updated = await api.setAgentField(agentId, 'name', val);
+      if (updated) config = updated;
+      if (agentId === activeAgentId) {
+        const nameEl = document.getElementById('agent-name');
+        if (nameEl) nameEl.textContent = val;
+      }
+    }
+    renderSidebar();
+  };
+
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation(); // keep global shortcuts from firing while typing
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 async function reorderAgent(fromId, toId) {
@@ -907,6 +961,15 @@ function selectAgent(agentId) {
   document.getElementById('logs-panel').classList.add('hidden');
   document.getElementById('configure-panel').classList.add('hidden');
 
+  // Close the reader too — it's bound to the previous agent's file. Autosave any
+  // unsaved edits first so switching agents never silently loses work.
+  if (readerOpen) {
+    if (cmUnsaved && cmEditor && readerFilePath) {
+      api.writeFile(readerFilePath, cmEditor.state.doc.toString());
+    }
+    closeReader();
+  }
+
   // Reset armed confirmation states
   stopArmed = false;
   clearArmed = false;
@@ -923,24 +986,62 @@ function selectAgent(agentId) {
   }
 }
 
+// --- Status dots: off (grey) / thinking (animated) / ready (green) ---
+function statusDotClass(agentId) {
+  const state = agentStates.get(agentId) || 'stopped';
+  if (state !== 'running') return 'status-dot off';
+  return workingAgents.has(agentId) ? 'status-dot thinking' : 'status-dot ready';
+}
+
+function paintDot(agentId) {
+  const dot = document.querySelector(`.status-dot[data-status="${agentId}"]`);
+  if (dot) dot.className = statusDotClass(agentId);
+}
+
+// Output arrived from a running agent -> it's "thinking"; after a quiet gap -> "ready".
+function markActivity(agentId) {
+  if (agentStates.get(agentId) !== 'running') return;
+  if (!workingAgents.has(agentId)) {
+    workingAgents.add(agentId);
+    paintDot(agentId);
+    if (agentId === activeAgentId) updateStatusUI(agentId);
+  }
+  clearTimeout(activityTimers.get(agentId));
+  activityTimers.set(agentId, setTimeout(() => {
+    workingAgents.delete(agentId);
+    paintDot(agentId);
+    if (agentId === activeAgentId) updateStatusUI(agentId);
+  }, READY_DEBOUNCE_MS));
+}
+
 function setAgentState(agentId, state) {
   agentStates.set(agentId, state);
+  if (state === 'running') {
+    markActivity(agentId); // booting counts as thinking; settles to ready when quiet
+  } else {
+    clearTimeout(activityTimers.get(agentId));
+    activityTimers.delete(agentId);
+    workingAgents.delete(agentId);
+  }
   if (agentId === activeAgentId) updateStatusUI(agentId);
-  const dot = document.querySelector(`.status-dot[data-status="${agentId}"]`);
-  if (dot) dot.className = `status-dot ${state}${agentHasNotification.has(agentId) ? ' notified' : ''}`;
+  paintDot(agentId);
 }
 
 function updateStatusUI(agentId) {
   const state = agentStates.get(agentId) || 'stopped';
   const badge = document.getElementById('agent-status');
   if (badge) {
-    const labels = { running: 'Running', stopped: 'Stopped', error: 'Exited' };
-    badge.textContent = labels[state] || state;
-    badge.className = state;
+    let label = 'Off', cls = 'off';
+    if (state === 'running') {
+      const working = workingAgents.has(agentId);
+      label = working ? 'Thinking…' : 'Ready';
+      cls = working ? 'thinking' : 'ready';
+    }
+    badge.textContent = label;
+    badge.className = cls;
   }
 
-  const dot = document.querySelector(`.status-dot[data-status="${agentId}"]`);
-  if (dot) dot.className = `status-dot ${state}${agentHasNotification.has(agentId) ? ' notified' : ''}`;
+  paintDot(agentId);
 
   const isRunning = state === 'running';
   document.getElementById('btn-start').style.display = isRunning ? 'none' : 'flex';
@@ -1788,6 +1889,13 @@ function closeReader() {
   readerMode = 'preview';
   cmUnsaved = false;
 
+  // Tear down the CodeMirror singleton so the next open binds fresh to the
+  // correct file instead of reusing a stale editor.
+  if (cmEditor) {
+    cmEditor.destroy();
+    cmEditor = null;
+  }
+
   document.getElementById('reader').classList.add('hidden');
   document.getElementById('reader-source').style.display = 'none';
   document.getElementById('reader-content').style.display = 'block';
@@ -1874,6 +1982,7 @@ async function copyForSlack() {
 function setupEventListeners() {
   // PTY data
   api.onData((agentId, data) => {
+    markActivity(agentId); // output flowing -> thinking; settles to ready when quiet
     const terminal = terminals.get(agentId);
     if (terminal) {
       terminal.write(data);
@@ -2088,11 +2197,8 @@ function setupEventListeners() {
     } else {
       agentHasNotification.delete(agentId);
     }
-    const dot = document.querySelector(`.status-dot[data-status="${agentId}"]`);
-    if (dot) {
-      const state = agentStates.get(agentId) || 'stopped';
-      dot.className = `status-dot ${state}${active ? ' notified' : ''}`;
-    }
+    // Idle/attention no longer reddens the dot — readiness is shown green via paintDot.
+    paintDot(agentId);
   });
 
 
@@ -2347,6 +2453,7 @@ function setupEventListeners() {
       // Cmd+N new instance
       if (e.key === 'n' && !e.shiftKey) {
         e.preventDefault();
+        if (e.repeat) return; // ignore key-repeat from a held Cmd+N
         duplicateAgent();
         return;
       }
@@ -2651,38 +2758,45 @@ function armStop() {
 }
 
 // --- Agent Duplication ---
+let duplicating = false;
 async function duplicateAgent() {
-  if (!activeAgentId) return;
+  if (duplicating || !activeAgentId) return;
   const source = config.agents.find(a => a.id === activeAgentId);
   if (!source || source.type === 'webview') return;
 
-  // Find next available instance number
-  const baseId = source.id.replace(/-\d+$/, '');
-  const existing = config.agents.filter(a => a.id === baseId || a.id.startsWith(baseId + '-'));
-  const num = existing.length + 1;
-  const newId = `${baseId}-${num}`;
+  duplicating = true;
+  try {
+    // Find the next instance number whose id is actually free (collision-proof,
+    // independent of how many siblings exist or were deleted)
+    const baseId = source.id.replace(/-\d+$/, '');
+    let num = 2;
+    while (config.agents.some(a => a.id === `${baseId}-${num}`)) num++;
+    const newId = `${baseId}-${num}`;
 
-  const newAgent = {
-    ...JSON.parse(JSON.stringify(source)),
-    id: newId,
-    name: `${source.name} (${num})`,
-    shortName: `${source.shortName}${num}`,
-  };
+    const newAgent = {
+      ...JSON.parse(JSON.stringify(source)),
+      id: newId,
+      name: `${source.name} (${num})`,
+      shortName: `${source.shortName}${num}`,
+    };
 
-  const updated = await api.addAgent(newAgent);
-  if (updated) config = updated;
+    const updated = await api.addAgent(newAgent);
+    if (updated) config = updated;
 
-  // Initialize state
-  agentStates.set(newId, 'stopped');
-  hasUnread.set(newId, false);
-  agentWorkspaceMap.set(newId, activeWorkspaceId);
+    // Initialize state
+    agentStates.set(newId, 'stopped');
+    hasUnread.set(newId, false);
+    agentWorkspaceMap.set(newId, activeWorkspaceId);
 
-  // Create terminal for new agent
-  createTerminalForAgent(newAgent);
+    // Create terminal for new agent
+    createTerminalForAgent(newAgent);
 
-  // Re-render sidebar and select
-  renderSidebar();
-  selectAgent(newId);
+    // Re-render sidebar and select
+    renderSidebar();
+    selectAgent(newId);
+  } finally {
+    duplicating = false;
+  }
 }
 
 // --- Crons Panel ---
@@ -4127,6 +4241,7 @@ const COMMANDS = [
   { label: 'Search Terminal', shortcut: ['Cmd', 'F'], action: () => openTerminalSearch() },
   { label: 'Add Agent', shortcut: [], action: () => openAddAgentModal() },
   { label: 'New Instance', shortcut: ['Cmd', 'N'], action: () => duplicateAgent() },
+  { label: 'Rename Instance', shortcut: [], action: () => startRenameAgent(activeAgentId) },
   { label: 'Clear Terminal', shortcut: [], action: () => armClear() },
   { label: 'Copy Last Response', shortcut: [], action: () => copyLastResponse() },
   { label: 'Increase Font Size', shortcut: ['Cmd', '+'], action: () => changeFontSize(1) },
