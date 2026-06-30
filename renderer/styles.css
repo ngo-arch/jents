@@ -712,6 +712,7 @@ html, body {
   transition: all var(--transition);
   position: relative;
   border: 1px solid transparent;
+  user-select: none; /* no text-selection flicker on double-click-to-rename */
 }
 
 .agent-item::before {
@@ -813,6 +814,7 @@ html, body {
   padding: 1px 4px;
   outline: none;
   font-family: inherit;
+  user-select: text;
 }
 
 .status-dot {

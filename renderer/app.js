@@ -70,6 +70,7 @@ const activityTimers = new Map(); // agentId -> timeout that flips working -> re
 const workingAgents = new Set();  // agents producing output right now
 const READY_DEBOUNCE_MS = 700;    // quiet gap after output before "ready"
 let renamingAgentId = null;       // agent whose sidebar label is being edited inline
+let lastAgentClick = { id: null, t: 0 }; // manual double-click detection for rename
 let terminalFontSize = 13;
 
 // Workspace state
@@ -679,16 +680,18 @@ function renderSidebar() {
       <div class="${statusDotClass(agent.id)}" data-status="${escapeHtml(agent.id)}"></div>
     `;
 
+    // Manual double-click detection: native dblclick is unreliable on
+    // draggable elements, so count two quick clicks on the same agent instead.
     item.addEventListener('click', (e) => {
       if (e.target.closest('.agent-remove-btn')) return;
+      const now = Date.now();
+      if (lastAgentClick.id === agent.id && now - lastAgentClick.t < 500) {
+        lastAgentClick = { id: null, t: 0 };
+        startRenameAgent(agent.id);
+        return;
+      }
+      lastAgentClick = { id: agent.id, t: now };
       selectAgent(agent.id);
-    });
-
-    // Double-click the row to rename the instance inline
-    item.addEventListener('dblclick', (e) => {
-      if (e.target.closest('.agent-remove-btn')) return;
-      e.preventDefault();
-      startRenameAgent(agent.id);
     });
 
     const removeBtn = item.querySelector('.agent-remove-btn');
