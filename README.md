@@ -27,9 +27,15 @@ Jents wraps the Claude Code CLI in a native Electron app. Each agent gets its ow
 
 ### Download (recommended)
 
-Grab the latest `.zip` from [Releases](https://github.com/ngo-arch/jents/releases), unzip, and drag to `/Applications`.
+Grab the latest `.zip` from [Releases](https://github.com/ngo-arch/jents/releases), unzip, and drag `Jents.app` to `/Applications`.
 
-On first launch, right-click the app and choose "Open" to bypass Gatekeeper.
+**Opening on macOS.** Jents is ad-hoc signed but not notarized (no paid Apple Developer ID), so macOS quarantines the download. After moving it to `/Applications`, clear the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Jents.app
+```
+
+Then open it normally. (If you skip this, macOS may say the app is "damaged" or "can't be opened" — that's Gatekeeper on an un-notarized app, not an actual corrupt download.)
 
 ### Build from source
 
