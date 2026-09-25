@@ -39,6 +39,43 @@ function getShellEnvironment() {
 const sessions = new Map();
 const logStreams = new Map();
 const sessionBuffers = new Map();
+// Last-seen DEC private modes per session (bracketed paste, alt screen, mouse...).
+// The replay buffer is a rolling tail, so the startup sequences that set these
+// fall off it; replay prepends them so a re-created terminal matches the pty.
+const sessionModes = new Map();
+const MAX_REPLAY_BUFFER = 200000;
+
+// Keep only the tail of the output, cut where a new escape sequence starts.
+// A raw slice lands mid-sequence (e.g. inside \x1b[38;2;59;56;68;48;2;42;38;51m),
+// and the replayed terminal prints the stranded parameters as text, which a
+// diffing TUI like Codex never overwrites.
+function trimReplayBuffer(buffer) {
+  if (buffer.length <= MAX_REPLAY_BUFFER) return buffer;
+  const tail = buffer.slice(-MAX_REPLAY_BUFFER);
+  const esc = tail.indexOf('\x1b');
+  return esc > 0 ? tail.slice(esc) : tail;
+}
+
+function trackModes(agentId, data) {
+  if (!data.includes('\x1b[?')) return;
+  let modes = sessionModes.get(agentId);
+  if (!modes) { modes = new Map(); sessionModes.set(agentId, modes); }
+  const re = /\x1b\[\?([\d;]+)([hl])/g;
+  let m;
+  while ((m = re.exec(data)) !== null) {
+    for (const mode of m[1].split(';')) if (mode) modes.set(mode, m[2]);
+  }
+}
+
+function replayBuffer(agentId) {
+  const buffer = sessionBuffers.get(agentId) || '';
+  if (!buffer) return '';
+  const modes = sessionModes.get(agentId);
+  if (!modes) return buffer;
+  let prefix = '';
+  for (const [mode, state] of modes) prefix += `\x1b[?${mode}${state}`;
+  return prefix + buffer;
+}
 
 // Idle detection for notifications
 const idleTimers = new Map();
@@ -529,6 +566,7 @@ function spawnAgent(agentId, opts = {}) {
 
   sessions.set(agentId, ptyProcess);
   sessionBuffers.set(agentId, '');
+  sessionModes.delete(agentId);
   outputSinceIdle.set(agentId, 0);
 
   // Create run record
@@ -537,10 +575,8 @@ function spawnAgent(agentId, opts = {}) {
 
   ptyProcess.onData((data) => {
     logStream.write(data);
-    let buffer = sessionBuffers.get(agentId) || '';
-    buffer += data;
-    if (buffer.length > 200000) buffer = buffer.slice(-200000);
-    sessionBuffers.set(agentId, buffer);
+    trackModes(agentId, data);
+    sessionBuffers.set(agentId, trimReplayBuffer((sessionBuffers.get(agentId) || '') + data));
     mainWindow?.webContents.send('agent:data', agentId, data);
 
     // Track output for idle detection
@@ -731,7 +767,7 @@ ipcMain.handle('agent:resize', (_, agentId, cols, rows) => {
   return false;
 });
 
-ipcMain.handle('agent:get-buffer', (_, agentId) => sessionBuffers.get(agentId) || '');
+ipcMain.handle('agent:get-buffer', (_, agentId) => replayBuffer(agentId));
 
 ipcMain.handle('agent:is-running', (_, agentId) => sessions.has(agentId));
 

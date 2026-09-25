@@ -1,7 +1,7 @@
 {
   "name": "jents",
   "productName": "Jents",
-  "version": "1.0.0-alpha.4",
+  "version": "1.0.0-alpha.5",
   "description": "Desktop app for managing AI agent terminal sessions",
   "main": "main.js",
   "scripts": {

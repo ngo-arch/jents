@@ -486,7 +486,9 @@ async function switchWorkspace(workspaceId) {
     selectAgent(targetAgent);
     showMainUI();
     syncTerminalSizes();
-    for (const [id, buf] of pendingBufferRestores) terminals.get(id)?.write(buf);
+    for (const [id, buf] of pendingBufferRestores) {
+      terminals.get(id)?.write(buf, () => forceRepaint(id));
+    }
   } else {
     activeAgentId = null;
     showWelcomeScreen();
@@ -1055,6 +1057,21 @@ function syncTerminalSizes() {
     ptySizes.set(id, { cols, rows });
     api.resize(id, cols, rows);
   }
+}
+
+// A replayed buffer is only the tail of the output, so what it paints can be
+// stale. Nudge the pty size so the running TUI repaints the whole screen;
+// diffing renderers (Codex/ratatui) otherwise leave replay leftovers in place.
+function forceRepaint(agentId) {
+  if (agentStates.get(agentId) !== 'running') return;
+  const terminal = terminals.get(agentId);
+  if (!terminal || terminal.rows < 2) return;
+  const { cols, rows } = terminal;
+  api.resize(agentId, cols, rows - 1);
+  setTimeout(() => {
+    api.resize(agentId, cols, rows);
+    ptySizes.set(agentId, { cols, rows });
+  }, 60);
 }
 
 // --- Agent Selection ---
