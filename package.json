@@ -8,7 +8,7 @@
     "build": "esbuild renderer/app.js --bundle --outfile=renderer/bundle.js --platform=browser --format=iife",
     "start": "npm run build && electron .",
     "rebuild": "electron-rebuild",
-    "postinstall": "electron-rebuild"
+    "postinstall": "electron-rebuild && chmod +x node_modules/node-pty/prebuilds/*/spawn-helper"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
